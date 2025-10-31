@@ -1061,12 +1061,6 @@ edsassistant/
 │   ├── emails.py             # Email sending utilities
 │   ├── permissions.py        # Custom permissions
 │   ├── admin.py              # Admin configuration
-│   ├── tests/
-│   │   ├── test_models.py
-│   │   ├── test_views.py
-│   │   ├── test_authentication.py
-│   │   ├── test_otp.py       # OTP generation and validation tests
-│   │   └── test_permissions.py
 │   └── templates/
 │       └── emails/
 │           ├── verify_email.html      # OTP verification email
@@ -1176,7 +1170,6 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 - [x] OTP attempt tracking (email_verification_attempts and password_reset_attempts fields)
 - [x] HttpOnly cookies for refresh tokens (XSS protection)
 - [ ] Rate limiting (intentionally not implemented for demo)
-- [ ] Testing suite (to be added later)
 - [ ] Token blacklisting (trade-off: stateless simplicity over immediate revocation)
 
 ---
