@@ -63,6 +63,12 @@
 - **API:** Django REST Framework
 - **Testing Interface:** Vanilla HTML (basic, lightweight)
 
+# Django framework versions:
+ - Django==4.2.7
+ - django-cors-headers==4.3.1
+ - djangorestframework==3.14.0
+ - djangorestframework-simplejwt==5.3.0
+
 ---
 
 ## DEVELOPMENT WORKFLOW

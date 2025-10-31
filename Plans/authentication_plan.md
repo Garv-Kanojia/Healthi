@@ -465,15 +465,38 @@ Request password reset OTP via email
 }
 ```
 
+**Response (403 Forbidden - Unverified Email):**
+
+```json
+{
+  "error": "Please verify your email first.",
+  "email_verified": false,
+  "action": "redirect_to_verification",
+  "message": "A verification OTP has been sent to your email.",
+  "otp_sent": true
+}
+```
+
 **Workflow:**
 
-1. Look up user by email (don't reveal if exists)
-2. Generate 6-digit random OTP
-3. Store OTP and timestamp
-4. Send OTP via email
-5. Return generic success message (security)
+1. Look up user by email (don't reveal if exists for security)
+2. **If user exists, check if email is verified:**
+   - **If is_email_verified=False:**
+     - Generate new 6-digit email verification OTP
+     - Save OTP to user record with current timestamp
+     - Send verification OTP via email
+     - Return 403 error with "redirect_to_verification" action
+     - Frontend redirects user to email verification page
+   - **If is_email_verified=True:**
+     - Continue to step 3
+3. Generate 6-digit random password reset OTP
+4. Store OTP and timestamp
+5. Send password reset OTP via email
+6. Return generic success message (security - don't reveal if email exists)
 
 **Note:** OTP expires in 1 hour and can only be used once.
+
+**Important:** Users with unverified emails CANNOT reset their password. They must verify their email first.
 
 ---
 
@@ -1086,7 +1109,7 @@ djangorestframework-simplejwt==5.3.0
 psycopg2-binary==2.9.9
 python-decouple==3.8
 django-environ==0.11.2
-django-cors-headers==4.3.0
+django-cors-headers==4.3.1
 celery==5.3.4
 redis==5.0.1
 ```
@@ -1171,6 +1194,10 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 9. **Password Policy:** 8-16 characters, must include at least 1 number and 1 uppercase letter
 10. **OTP Verification:** 6-digit numeric codes, 1-hour expiry, 3 attempts max (tracked in database), 60-second resend cooldown
 11. **Email + OTP Required:** User must provide both email and OTP for verification/password reset
-12. **Unverified Email Flow:** If user tries to register with unverified email OR tries to login with unverified email, they are redirected to login page (for registration attempt) or verification page (for login attempt) with automatic OTP generation and email sending
+12. **Unverified Email Flow - Complete Scenarios:**
+    - **Scenario 1 (Re-registration after closing tab):** User registers → closes tab → OTP expires (1 hour) → tries to register again → gets 409 error "email already registered but not verified" → redirects to login → login triggers new OTP and verification flow
+    - **Scenario 2 (Login with unverified email):** User tries to login with correct credentials but unverified email → backend validates credentials → checks email verification status → generates new OTP → sends verification email → returns 403 with "redirect_to_verification" → frontend shows verification page
+    - **Scenario 3 (Password reset with unverified email):** User clicks "Forgot Password" → enters unverified email → backend checks verification status → generates verification OTP (not password reset OTP) → sends verification email → returns 403 with "redirect_to_verification" → frontend shows verification page → user must verify email first before resetting password
 13. **Refresh Token Storage:** HttpOnly cookies recommended for production (XSS protection); response body as fallback for development
 14. **Stateless JWT Trade-off:** No token blacklisting means compromised tokens remain valid until expiry (max 7 days for refresh tokens)
+15. **Email Verification Priority:** Email verification is ALWAYS enforced before any other operations (login, password reset)
