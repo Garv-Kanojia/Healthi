@@ -42,12 +42,9 @@ def register(request):
     Register a new user account.
     Endpoint: POST /api/auth/register/
     """
-    serializer = UserRegistrationSerializer(data=request.data)
-    
-    if serializer.is_valid():
-        email = serializer.validated_data['email']
-        
-        # Check if email already exists
+    # Check if email already exists BEFORE validation
+    email = request.data.get('email')
+    if email:
         existing_user = User.objects.filter(email=email).first()
         
         if existing_user:
@@ -67,7 +64,11 @@ def register(request):
                     'action': 'redirect_to_login',
                     'email_verified': False
                 }, status=status.HTTP_409_CONFLICT)
-        
+    
+    # Now validate the serializer
+    serializer = UserRegistrationSerializer(data=request.data)
+    
+    if serializer.is_valid():
         # Create new user
         user = serializer.save()
         
@@ -377,36 +378,30 @@ def resend_verification(request):
 
 # ========== USER PROFILE ENDPOINTS ==========
 
-@api_view(['GET'])
+@api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
-def get_user_profile(request):
+def user_profile(request):
     """
-    Get current user profile.
-    Endpoint: GET /api/auth/user/profile/
+    Get or update current user profile.
+    Endpoint: GET/PATCH /api/auth/user/profile/
     """
     user = request.user
-    serializer = UserProfileSerializer(user)
-    return Response(serializer.data, status=status.HTTP_200_OK)
-
-
-@api_view(['PATCH'])
-@permission_classes([IsAuthenticated])
-def update_user_profile(request):
-    """
-    Update user profile.
-    Endpoint: PATCH /api/auth/user/profile/
-    """
-    user = request.user
-    serializer = UserProfileUpdateSerializer(user, data=request.data, partial=True)
     
-    if serializer.is_valid():
-        serializer.save()
+    if request.method == 'GET':
+        serializer = UserProfileSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    elif request.method == 'PATCH':
+        serializer = UserProfileUpdateSerializer(user, data=request.data, partial=True)
         
-        # Return updated profile
-        response_serializer = UserProfileSerializer(user)
-        return Response(response_serializer.data, status=status.HTTP_200_OK)
-    
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if serializer.is_valid():
+            serializer.save()
+            
+            # Return updated profile
+            response_serializer = UserProfileSerializer(user)
+            return Response(response_serializer.data, status=status.HTTP_200_OK)
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
@@ -442,51 +437,43 @@ def change_password(request):
 
 # ========== MEDICAL HISTORY ENDPOINTS ==========
 
-@api_view(['POST', 'PUT'])
+@api_view(['GET', 'POST', 'PUT'])
 @permission_classes([IsAuthenticated])
-def create_or_update_medical_history(request):
+def medical_history(request):
     """
-    Add/Update medical history.
-    Endpoint: POST/PUT /api/auth/user/medical-history/
+    Get, add, or update medical history.
+    Endpoint: GET/POST/PUT /api/auth/user/medical-history/
     """
     user = request.user
     
-    try:
-        # Try to get existing medical history
-        medical_history = user.medical_history
-        serializer = MedicalHistorySerializer(medical_history, data=request.data, partial=True)
-        
-        if serializer.is_valid():
-            serializer.save()
+    if request.method == 'GET':
+        try:
+            medical_history_obj = user.medical_history
+            serializer = MedicalHistorySerializer(medical_history_obj)
             return Response(serializer.data, status=status.HTTP_200_OK)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        
-    except MedicalHistory.DoesNotExist:
-        # Create new medical history
-        serializer = MedicalHistorySerializer(data=request.data)
-        
-        if serializer.is_valid():
-            serializer.save(user=user)
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def get_medical_history(request):
-    """
-    Get user's medical history.
-    Endpoint: GET /api/auth/user/medical-history/
-    """
-    user = request.user
+        except MedicalHistory.DoesNotExist:
+            return Response({
+                'error': 'Medical history not found.'
+            }, status=status.HTTP_404_NOT_FOUND)
     
-    try:
-        medical_history = user.medical_history
-        serializer = MedicalHistorySerializer(medical_history)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    except MedicalHistory.DoesNotExist:
-        return Response({
-            'error': 'Medical history not found.'
-        }, status=status.HTTP_404_NOT_FOUND)
+    elif request.method in ['POST', 'PUT']:
+        try:
+            # Try to get existing medical history
+            medical_history_obj = user.medical_history
+            serializer = MedicalHistorySerializer(medical_history_obj, data=request.data, partial=True)
+            
+            if serializer.is_valid():
+                serializer.save()
+                return Response(serializer.data, status=status.HTTP_200_OK)
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
+        except MedicalHistory.DoesNotExist:
+            # Create new medical history
+            serializer = MedicalHistorySerializer(data=request.data)
+            
+            if serializer.is_valid():
+                serializer.save(user=user)
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
+            
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

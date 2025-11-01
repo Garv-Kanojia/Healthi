@@ -21,11 +21,9 @@ urlpatterns = [
     path('resend-verification/', views.resend_verification, name='resend_verification'),
     
     # User profile endpoints
-    path('user/profile/', views.get_user_profile, name='get_user_profile'),
-    path('user/profile/', views.update_user_profile, name='update_user_profile'),
+    path('user/profile/', views.user_profile, name='user_profile'),
     path('user/change-password/', views.change_password, name='change_password'),
     
     # Medical history endpoints
-    path('user/medical-history/', views.create_or_update_medical_history, name='create_or_update_medical_history'),
-    path('user/medical-history/', views.get_medical_history, name='get_medical_history'),
+    path('user/medical-history/', views.medical_history, name='medical_history'),
 ]
