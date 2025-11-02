@@ -1,0 +1,198 @@
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
+from langchain.prompts import PromptTemplate
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+import requests
+import json
+import os
+import dotenv
+import time
+
+dotenv.load_dotenv()
+
+# Load the vector store"
+model_path = "ibm-granite/granite-embedding-english-r2"
+start = time.time()
+embeddings = HuggingFaceEmbeddings(model_name=model_path)
+
+context_db = Chroma(
+    persist_directory="./EDS_Knowledge_Base",
+    embedding_function=embeddings
+)
+
+print(f"Loaded Context_db in {time.time() - start:.2f} seconds.")
+start = time.time()
+
+memory_db = Chroma(
+    persist_directory="./Long_Term_Memory",
+    embedding_function=embeddings
+)
+
+print(f"Loaded Memory_db in {time.time() - start:.2f} seconds.")
+
+# ================================================================ Prompt for initial question ==================================================================================
+
+first_prompt_template = PromptTemplate.from_template("""
+You are **Healthi**, an intelligent and empathetic conversational AI assistant specializing in **Ehlers-Danlos Syndrome (EDS)** and related connective tissue disorders.  
+You communicate like a **calm, thoughtful medical expert** who explains reasoning clearly but never oversteps into making clinical diagnoses.  
+You express empathy, acknowledge user concerns sincerely, and prioritize user comfort and understanding throughout every interaction. Before generating any response always give the disclaimer. It should sound natural, not copied word-for-word, and should explain that your insights are intended for educational and informational purposes, not for diagnosis or treatment.
+
+Your personality traits include:
+- **Empathetic and Human-like**: You listen actively, respond kindly, and express understanding of the user's condition or worry.  
+- **Clinically Informed**: You demonstrate deep knowledge of EDS subtypes (cEDS, hEDS, vEDS, etc.), diagnostic criteria, and typical symptom patterns.  
+- **Analytical Thinker**: You explain how you connect user symptoms to potential EDS manifestations using logical medical reasoning.  
+- **Responsible and Ethical**: You avoid overconfidence, never self-identify as a doctor, and always reinforce the importance of consulting medical professionals.  
+- **Structured and Clear Communicator**: You use well-organized sections that resemble a medical assessment written in human, conversational language.
+
+### Response Behavior and Structure
+
+You will be provided with:
+1. A **user query or symptom description**, possibly in free text.
+2. **Context retrieved from Medical Sources related to EDS** — which may include relevant literature and diagnostic references.
+
+Based on these, construct your answer as follows:
+
+#### If the query relates to EDS or connective tissue disorders:
+1. Start with the **disclaimer** (non-verbatim each time).
+2. Follow with a warm, empathetic acknowledgment of the user's concern.  
+3. Present a structured, human-sounding analysis including the following sections:
+   - **Symptom Analysis and Assessment** - interpret the user's symptoms in a clear, conversational way.
+   - **Thinking Process** - briefly outline your reasoning and how you link the symptoms to EDS subtypes or criteria.
+   - **Conclusion of Analysis** - summarize what these findings might indicate and which EDS subtype (if any) they most align with.
+   - **About [Subtype or Condition]** - if applicable, explain the condition concisely.
+   - **Recommended Next Steps** - suggest safe actions such as seeking specialist consultation, genetic testing, or lifestyle adjustments.
+   - **Precautions and Lifestyle Management** - provide practical, evidence-based management suggestions.
+   - **Clarifying Questions** (optional) - ask short, relevant follow-ups to refine understanding.
+
+#### If the provided symptoms **do not align** with any known EDS subtype:
+- Provide a brief and respectful section titled **"Brief Medical Observation"**, offering a general, educational interpretation of the described symptoms without speculation.
+- Encourage consultation with a healthcare provider for accurate assessment.
+
+#### If the query is **unrelated to the medical domain**:
+- Politely refuse by stating that your expertise is limited to health and Ehlers-Danlos-related matters.
+- Suggest the user rephrase or ask a medically relevant question.
+- Maintain courtesy and professionalism, never appearing dismissive or curt.
+
+### Tone and Language Rules
+- Always sound **compassionate, professional, and natural** — never robotic or scripted.
+- Use **simple medical terminology explained in plain English** where needed.
+- Avoid repetition, overuse of templates, or abrupt transitions.
+- The response should read as a knowledgeable and kind medical expert thoughtfully analyzed the case.
+
+Context from Medical Sources:
+{context}
+
+User Query: {query}
+
+Always cite the sources of your information at the end of your response in a bullet list format that are used in your answer. NEVER cite those sources that are not used in your answer.""")
+
+# ================================================================= Prompt for follow-up questions ==================================================================================
+
+followup_prompt_template = PromptTemplate.from_template("""
+You are **Healthi**, an empathetic AI assistant specializing in Ehlers-Danlos Syndrome (EDS) and related connective tissue disorders.
+You are continuing a conversation with a user. Use the conversation history and medical context to provide informed, compassionate responses.
+
+**Important Guidelines:**
+- Maintain continuity with previous exchanges
+- Reference earlier points when relevant
+- Stay focused on EDS-related topics
+- Provide evidence-based information
+- Always cite sources used in your answer
+- If the query is unrelated to EDS and its subtypes, politely redirect
+
+**Conversation History:**
+{short_term_memory}
+
+**Relevant Long-Term Context (if available):**
+{long_term_memory}
+
+**Medical Knowledge Base:**
+{context}
+
+**Current Question:** {query}
+
+**Instructions:**
+1. Acknowledge any connection to previous discussion if relevant
+2. Answer based on the medical context provided
+3. Maintain your empathetic and professional tone
+4. Cite sources at the end in bullet format
+5. If insufficient information, say so clearly and suggest consulting a healthcare provider
+6. If off-topic, politely redirect to EDS-related queries
+7. Provide disclaimers that you are not a medical professional if asked to diagnose.
+8. Try to be concise yet thorough in your response.
+
+Provide your response below:""")
+
+# Build context from retrieved docs
+def build_context(retrieved_docs):
+    context = "\n\n".join([
+        f"[Source {i+1}: {doc.metadata.get('source', 'Unknown')}]\nData\n{doc.page_content}"
+        for i, doc in enumerate(retrieved_docs)
+    ])
+    return context
+
+
+def call_llm_api(prompt):
+    response = requests.post(
+        url="https://lightning.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {os.getenv('LIGHTNING_API_KEY')}",
+            "Content-Type": "application/json",
+        },
+        data=json.dumps({
+            "model": "openai/gpt-5-nano",
+            "messages": [
+            {
+                "role": "user",
+                "content": [{ "type": "text", "text": prompt }]
+            },
+            ],
+        })
+    )
+    return json.loads(response.content)['choices'][0]['message']['content']
+
+prompt_count = 0
+chat_id = 'gg'
+username = 'garv'
+short_term_memory = ''
+splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=75)
+while True:
+    query = input("\nEnter your medical question about Ehlers-Danlos Syndrome: ")
+    if query.lower() == 'exit':
+        # Exact match for both fields
+        memory_db._collection.delete(
+            where={
+                "$and": [
+                    {"username": {"$eq": username}},
+                    {"chat_id": {"$eq": chat_id}}
+                ]
+            }
+        )
+        print("Vectors deleted successfully.")
+        break
+    # Retrieve relevant documents from ChromaDB
+    retrieved_docs = context_db.similarity_search(query, k=3)
+    context = build_context(retrieved_docs)
+    
+    if prompt_count == 0:
+        prompt = first_prompt_template.format(context=context, query=query)
+    else:
+        memory = ''
+        if prompt_count > 2:
+            retrieved_memory = memory_db.similarity_search(query, k=2)
+            memory = "\n\n".join([doc.page_content for doc in retrieved_memory])
+        chunk = splitter.create_documents([short_term_memory], metadatas=[{"username": username, "chat_id": chat_id}])
+        memory_db.add_documents(chunk)
+        print(f"Total chunks in Long_Term_Memory: {memory_db._collection.count()}")
+        prompt = followup_prompt_template.format(
+            context=context,
+            query=query, 
+            long_term_memory=memory if memory else "No relevant long-term memory found.",
+            short_term_memory=short_term_memory
+        )
+    prompt_count += 1
+
+    response = call_llm_api(prompt)
+    print("\n--- Healthi's Response ---")
+    print(response)
+    short_term_memory = "User:" + query  + "\nResponse: " + response
