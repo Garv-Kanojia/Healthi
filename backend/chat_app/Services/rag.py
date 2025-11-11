@@ -16,7 +16,7 @@ class rag_service:
         self.embeddings = HuggingFaceEmbeddings(model_name="ibm-granite/granite-embedding-english-r2")
         self.context_db = Chroma(
             persist_directory="./EDS_Knowledge_Base",
-            embedding_function=self.__embeddings
+            embedding_function=self.embeddings
         )
 
 
@@ -158,7 +158,7 @@ Provide your response below:""")
 
             self.memory_db = Chroma(
                 persist_directory="./Long_Term_Memory",
-                embedding_function=self.__embeddings
+                embedding_function=self.embeddings
             )
             self.splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=75)
         return {
@@ -169,7 +169,8 @@ Provide your response below:""")
     
     def first_query(self, query: str):
         context = self.__build_context(query)
-        prompt = rag_service.first_prompt_template.format(context=context, query=query)
+        prompt_template = rag_service.first_prompt_template()
+        prompt = prompt_template.format(context=context, query=query)
         return rag_service.call_llm_api(prompt)
 
     
@@ -178,7 +179,8 @@ Provide your response below:""")
         context = self.__build_context(query)
         # Retrieve relevant documents from Long_Term_Memory
         long_term_memory = self.__retrieve_memory(memory_db=self.memory_db, splitter=self.splitter, short_term_memory=short_term_memory, query=query)
-        prompt = rag_service.followup_prompt_template.format(
+        prompt_template = rag_service.followup_prompt_template()
+        prompt = prompt_template.format(
             context=context,
             query=query, 
             long_term_memory=long_term_memory,
