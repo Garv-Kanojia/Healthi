@@ -32,6 +32,13 @@ class Chat(models.Model):
         help_text="User-defined chat name, can be changed anytime"
     )
     
+    # Patient information (optional)
+    patient_info = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Patient information for this chat session (Age, Gender, Clinical Notes)"
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(
         auto_now_add=True,
@@ -50,6 +57,17 @@ class Chat(models.Model):
     
     def __str__(self):
         return f"{self.user.email} - {self.name} ({self.chat_id})"
+    
+    def clean(self):
+        """
+        Validate chat constraints.
+        """
+        if not self.pk:  # Only check for new chats
+            user_chat_count = Chat.objects.filter(user=self.user).count()
+            if user_chat_count >= 3:
+                raise ValidationError(
+                    "You cannot create more than 3 chats. Please delete an existing chat first."
+                )
     
     def save(self, *args, **kwargs):
         """
@@ -82,11 +100,6 @@ class Message(models.Model):
         help_text='Encrypted message content stored as JSON: {"prompt": "...", "response": "..."}'
     )
     
-    # Message sequence number
-    count = models.IntegerField(
-        help_text="Message sequence number in the specific chat"
-    )
-    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -94,15 +107,13 @@ class Message(models.Model):
         db_table = 'messages'
         verbose_name = 'Message'
         verbose_name_plural = 'Messages'
-        ordering = ['count']
-        unique_together = ['chat', 'count']
+        ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['chat', 'count']),
-            models.Index(fields=['chat', 'created_at']),
+            models.Index(fields=['chat', '-created_at']),
         ]
     
     def __str__(self):
-        return f"{self.chat.name} - Message #{self.count}"
+        return f"{self.chat.name} - {self.created_at}"
     
     @staticmethod
     def get_encryption_key():
@@ -233,7 +244,7 @@ class MessageFile(models.Model):
         ]
     
     def __str__(self):
-        return f"{self.file_name} ({self.file_type}) - Message #{self.message.count}"
+        return f"{self.file_name} ({self.file_type})"
     
     def clean(self):
         """

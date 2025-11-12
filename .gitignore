@@ -19,5 +19,8 @@ ENV/
 .vscode/
 .github/
 
+backend\chat_app\migrations
+backend\authentication\migrations
+
 backend/chat_app/Services/EDS_Knowledge_Base/
 backend/chat_app/Services/Long_Term_Memory/

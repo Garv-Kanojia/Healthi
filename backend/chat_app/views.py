@@ -34,18 +34,10 @@ class ChatListCreateView(APIView):
     
     def post(self, request):
         """Create a new chat."""
-        # Check if user already has 3 chats
-        user_chat_count = Chat.objects.filter(user=request.user).count()
-        if user_chat_count >= 3:
-            return Response({
-                'success': False,
-                'error': 'You cannot create more than 3 chats. Please delete an existing chat first.'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        serializer = ChatCreateSerializer(data=request.data)
+        serializer = ChatCreateSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             try:
-                chat = serializer.save(user=request.user)
+                chat = serializer.save()
                 return Response({
                     'success': True,
                     'message': 'Chat created successfully',
@@ -155,26 +147,21 @@ class MessageQueryView(APIView):
             
             # Determine if this is first query or follow-up
             if last_message is None:
-                # First query - no previous messages
-                response_text = rag.first_query(query)
+                # First query - include patient info if available
+                response_text = rag.first_query(query, patient_info=chat.patient_info)
             else:
                 # Follow-up query - retrieve short-term memory
                 rag.set_up_memoryDB()
                 
                 # Get last 3 messages for short-term memory
-                short_term_memory = self._build_short_term_memory(last_message)
+                recent_messages = chat.messages.order_by('-created_at').first()
+                short_term_memory = self._build_short_term_memory(recent_messages)
                 
                 response_text = rag.followup_query(query, short_term_memory)
             
-            # Get message count for creating new message
-            message_count = chat.messages.count()
-            
             # Create and save message
             with transaction.atomic():
-                message = Message.objects.create(
-                    chat=chat,
-                    count=message_count + 1
-                )
+                message = Message.objects.create(chat=chat)
                 message.set_content(prompt=query, response=response_text)
                 message.save()
                 
@@ -186,7 +173,6 @@ class MessageQueryView(APIView):
             return Response({
                 'success': True,
                 'message': {
-                    'count': message.count,
                     'prompt': query,
                     'response': response_text,
                     'created_at': message.created_at
@@ -205,13 +191,12 @@ class MessageQueryView(APIView):
                 'error': f'Failed to process query: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    def _build_short_term_memory(self, message):
+    def _build_short_term_memory(self, messages):
         """Build short-term memory from recent messages."""
         memory_parts = []
-        content = list(message)[0].get_content()
+        content = list(messages)[0].get_content()
         memory_parts.append(f"User: {content.get('prompt', '')}")
         memory_parts.append(f"Assistant: {content.get('response', '')}")
-        
         return "\n\n".join(memory_parts)
     
     def _process_files(self, message, files):

@@ -59,10 +59,10 @@ class User(AbstractUser):
     name = models.CharField(max_length=150)
     age = models.PositiveIntegerField(
         null=True, 
-        blank=True,
+        blank=False,
         validators=[MinValueValidator(1), MaxValueValidator(120)]
     )
-    gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=True)
+    gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=False)
     
     # Authentication Fields
     is_email_verified = models.BooleanField(default=False)

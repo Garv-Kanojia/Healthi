@@ -52,18 +52,23 @@ Your personality traits include:
 - **Responsible and Ethical**: You avoid overconfidence, never self-identify as a doctor, and always reinforce the importance of consulting medical professionals.  
 - **Structured and Clear Communicator**: You use well-organized sections that resemble a medical assessment written in human, conversational language.
 
+### Patient Information (if provided):
+{patient_info}
+
 ### Response Behavior and Structure
 
 You will be provided with:
 1. A **user query or symptom description**, possibly in free text.
 2. **Context retrieved from Medical Sources related to EDS** — which may include relevant literature and diagnostic references.
+3. **Patient Information** (if available) - age, gender, and clinical notes about the patient being discussed.
 
 Based on these, construct your answer as follows:
 
 #### If the query relates to EDS or connective tissue disorders:
 1. Start with the **disclaimer** (non-verbatim each time).
 2. Follow with a warm, empathetic acknowledgment of the user's concern.  
-3. Present a structured, human-sounding analysis including the following sections:
+3. If patient information is provided, acknowledge it briefly and use it to contextualize your analysis.
+4. Present a structured, human-sounding analysis including the following sections:
    - **Symptom Analysis and Assessment** - interpret the user's symptoms in a clear, conversational way.
    - **Thinking Process** - briefly outline your reasoning and how you link the symptoms to EDS subtypes or criteria.
    - **Conclusion of Analysis** - summarize what these findings might indicate and which EDS subtype (if any) they most align with.
@@ -167,10 +172,18 @@ Provide your response below:""")
         }
 
     
-    def first_query(self, query: str):
+    def first_query(self, query: str, patient_info: str = None):
         context = self.__build_context(query)
         prompt_template = rag_service.first_prompt_template()
-        prompt = prompt_template.format(context=context, query=query)
+        
+        # Format patient info or use "Not provided" if None
+        formatted_patient_info = patient_info if patient_info else "Not provided"
+        
+        prompt = prompt_template.format(
+            context=context, 
+            query=query,
+            patient_info=formatted_patient_info
+        )
         return rag_service.call_llm_api(prompt)
 
     
