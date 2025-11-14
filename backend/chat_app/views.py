@@ -144,21 +144,8 @@ class MessageQueryView(APIView):
             
             # Retrieve the very last message based on created_at
             last_message = chat.messages.order_by('-created_at').first()
-            
-            # Determine if this is first query or follow-up
-            if last_message is None:
-                # First query - include patient info if available
-                response_text = rag.first_query(query, patient_info=chat.patient_info)
-            else:
-                # Follow-up query - retrieve short-term memory
-                rag.set_up_memoryDB()
-                
-                # Get last 3 messages for short-term memory
-                recent_messages = chat.messages.order_by('-created_at').first()
-                short_term_memory = self._build_short_term_memory(recent_messages)
-                
-                response_text = rag.followup_query(query, short_term_memory)
-            
+            file_response = None
+
             # Create and save message
             with transaction.atomic():
                 message = Message.objects.create(chat=chat)
@@ -167,7 +154,21 @@ class MessageQueryView(APIView):
                 
                 # Handle file attachments if any
                 if files:
-                    self._process_files(message, files)
+                    file_response = self._process_files(message, files)
+            
+            # Determine if this is first query or follow-up
+            if last_message is None:
+                # First query - include patient info if available
+                response_text = rag.first_query(query, patient_info=chat.patient_info, file_response=file_response)
+            else:
+                # Follow-up query - retrieve short-term memory
+                rag.set_up_memoryDB()
+                
+                # Get last 3 messages for short-term memory
+                recent_messages = chat.messages.order_by('-created_at').first()
+                short_term_memory = self._build_short_term_memory(recent_messages)
+                
+                response_text = rag.followup_query(query, short_term_memory, file_response=file_response)
             
             # Return response
             return Response({
@@ -218,3 +219,7 @@ class MessageQueryView(APIView):
                 file_name=file.name,
                 file_size=file.size
             )
+
+        # I will insert the code where the file goes to the file processing API and the response will be returned accordingly.
+        response = ""
+        return response

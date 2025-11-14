@@ -55,6 +55,8 @@ Your personality traits include:
 ### Patient Information (if provided):
 {patient_info}
 
+{file_response_section}
+
 ### Response Behavior and Structure
 
 You will be provided with:
@@ -112,6 +114,8 @@ You are continuing a conversation with a user. Use the conversation history and 
 - Provide evidence-based information
 - Always cite sources used in your answer
 - If the query is unrelated to EDS and its subtypes, politely redirect
+                                            
+{file_response_section}
 
 **Conversation History:**
 {short_term_memory}
@@ -172,7 +176,11 @@ Provide your response below:""")
         }
 
     
-    def first_query(self, query: str, patient_info: str = None):
+    def first_query(self, query: str, patient_info: str = None, file_response: str = None):
+        file_response_section = f"""
+This is the information extracted from the files provided by the user:
+{file_response}
+"""
         context = self.__build_context(query)
         prompt_template = rag_service.first_prompt_template()
         
@@ -182,12 +190,17 @@ Provide your response below:""")
         prompt = prompt_template.format(
             context=context, 
             query=query,
-            patient_info=formatted_patient_info
+            patient_info=formatted_patient_info,
+            file_response_section=file_response_section if file_response else ""
         )
         return rag_service.call_llm_api(prompt)
 
     
-    def followup_query(self, query: str, short_term_memory: str):
+    def followup_query(self, query: str, short_term_memory: str, file_response: str = None):
+        file_response_section = f"""
+This is the information extracted from the files provided by the user:
+{file_response}
+"""
         # Retriieve documents froom corpus
         context = self.__build_context(query)
         # Retrieve relevant documents from Long_Term_Memory
@@ -197,7 +210,8 @@ Provide your response below:""")
             context=context,
             query=query, 
             long_term_memory=long_term_memory,
-            short_term_memory=short_term_memory
+            short_term_memory=short_term_memory,
+            file_response_section=file_response_section if file_response else ""
         )
         return rag_service.call_llm_api(prompt)
     
