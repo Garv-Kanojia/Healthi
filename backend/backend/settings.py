@@ -33,6 +33,7 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(','
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",  # Must be first for ASGI support
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -44,6 +45,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
+    "channels",
     
     # Local apps
     "authentication",
@@ -80,6 +82,19 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "backend.wsgi.application"
+
+# ASGI application for WebSocket support
+ASGI_APPLICATION = "backend.asgi.application"
+
+# Channel layers for WebSocket support
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(config('REDIS_HOST', default='127.0.0.1'), config('REDIS_PORT', default=6379, cast=int))],
+        },
+    },
+}
 
 
 # Database
@@ -178,11 +193,24 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    # "http://localhost:3000",  # Uncomment for future Vue.js frontend
-    # "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+
+# Allow WebSocket connections from allowed origins
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 
 # ========== EMAIL SETTINGS ==========
