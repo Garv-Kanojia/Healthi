@@ -145,11 +145,12 @@ class MessageQueryView(APIView):
             # Retrieve the very last message based on created_at
             last_message = chat.messages.order_by('-created_at').first()
             file_response = None
-
-            # Create and save message
+            
+            # Create message with placeholder response initially
             with transaction.atomic():
                 message = Message.objects.create(chat=chat)
-                message.set_content(prompt=query, response=response_text)
+                # We'll update the content with the actual response later
+                message.set_content(prompt=query, response="")
                 message.save()
                 
                 # Handle file attachments if any
@@ -164,11 +165,14 @@ class MessageQueryView(APIView):
                 # Follow-up query - retrieve short-term memory
                 rag.set_up_memoryDB()
                 
-                # Get last 3 messages for short-term memory
-                recent_messages = chat.messages.order_by('-created_at').first()
-                short_term_memory = self._build_short_term_memory(recent_messages)
+                # Get last message for short-term memory
+                short_term_memory = self._build_short_term_memory(last_message)
                 
                 response_text = rag.followup_query(query, short_term_memory, file_response=file_response)
+            
+            # Update message with actual response
+            message.set_content(prompt=query, response=response_text)
+            message.save()
             
             # Return response
             return Response({
@@ -192,10 +196,13 @@ class MessageQueryView(APIView):
                 'error': f'Failed to process query: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    def _build_short_term_memory(self, messages):
-        """Build short-term memory from recent messages."""
+    def _build_short_term_memory(self, message):
+        """Build short-term memory from recent message."""
+        if not message:
+            return ""
+        
         memory_parts = []
-        content = list(messages)[0].get_content()
+        content = message.get_content()
         memory_parts.append(f"User: {content.get('prompt', '')}")
         memory_parts.append(f"Assistant: {content.get('response', '')}")
         return "\n\n".join(memory_parts)

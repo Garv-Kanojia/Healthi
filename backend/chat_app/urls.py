@@ -2,8 +2,7 @@ from django.urls import path
 from .views import (
     ChatListCreateView,
     ChatDetailView,
-    MessageQueryView,
-    ChatHistoryView
+    MessageQueryView
 )
 
 urlpatterns = [

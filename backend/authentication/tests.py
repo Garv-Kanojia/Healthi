@@ -3,6 +3,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.utils import timezone
 from authentication.models import User, MedicalHistory
+import time
 
 
 class UserModelTest(TestCase):
@@ -133,7 +134,8 @@ class UserModelTest(TestCase):
             email=self.user_data['email'],
             password=self.user_data['password'],
             name=self.user_data['name'],
-            age=25
+            age=25,
+            gender='Male'
         )
         user.full_clean()  # Should not raise
         
@@ -178,6 +180,9 @@ class UserModelTest(TestCase):
         created_at = user.created_at
         updated_at = user.updated_at
         
+        # Ensure some time passes
+        time.sleep(0.1)
+
         # Update user
         user.name = 'Updated Name'
         user.save()
@@ -302,6 +307,9 @@ class MedicalHistoryModelTest(TestCase):
         
         created_at = history.created_at
         
+        # Ensure some time passes
+        time.sleep(0.1)
+
         # Update notes
         history.medical_notes = 'Updated notes with more information'
         history.save()

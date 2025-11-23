@@ -193,8 +193,8 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -236,4 +236,10 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
+
+
+# ========== APP SETTINGS ==========
+
+# Message Encryption Key (Generated for development)
+MESSAGE_ENCRYPTION_KEY = config('MESSAGE_ENCRYPTION_KEY', default='zTPP71laMQEn0CkvqR_J3y36HHai-HHrNDHDUDD5KPc=')
 

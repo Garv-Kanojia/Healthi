@@ -11,3 +11,9 @@ channels>=4.0.0
 daphne>=4.0.0
 channels-redis>=4.1.0
 faster-whisper>=1.0.0
+langchain
+langchain-community
+chromadb
+sentence-transformers
+python-dotenv
+requests
