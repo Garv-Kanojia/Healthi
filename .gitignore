@@ -22,3 +22,5 @@ ENV/
 
 backend/chat_app/Services/EDS_Knowledge_Base/
 backend/chat_app/Services/Long_Term_Memory/
+EDS_Knowledge_Base
+Long_Term_Memory

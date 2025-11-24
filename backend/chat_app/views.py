@@ -111,6 +111,7 @@ class ChatDetailView(APIView):
             }, status=status.HTTP_200_OK)
         
         except Exception as e:
+            print(f"Error deleting chat: {e}")
             return Response({
                 'success': False,
                 'error': f'Failed to delete chat: {str(e)}'

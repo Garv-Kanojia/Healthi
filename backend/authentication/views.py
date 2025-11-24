@@ -288,23 +288,30 @@ def password_reset_confirm(request):
     Reset password with OTP.
     Endpoint: POST /api/auth/password-reset/confirm/
     """
+    print("Password Reset Confirm Data:", request.data) # Debug print
+    # Force reload
     serializer = PasswordResetConfirmSerializer(data=request.data)
     
     if serializer.is_valid():
         email = serializer.validated_data['email']
         otp = serializer.validated_data['otp']
-        new_password = serializer.validated_data['password']
+        new_password = serializer.validated_data['new_password']
         
         # Find user
         try:
             user = User.objects.get(email=email)
+            print(f"User found: {user.email}") # Debug print
+            print(f"Stored OTP: {user.password_reset_otp}, Incoming OTP: {otp}") # Debug print
+            print(f"OTP Sent At: {user.password_reset_sent_at}") # Debug print
         except User.DoesNotExist:
+            print("User not found") # Debug print
             return Response({
                 'error': 'User not found.'
             }, status=status.HTTP_404_NOT_FOUND)
         
         # Validate OTP
         is_valid, error_message = validate_otp(user, otp, 'password_reset')
+        print(f"OTP Validation Result: {is_valid}, Error: {error_message}") # Debug print
         
         if not is_valid:
             # Increment attempts if OTP is incorrect
@@ -324,6 +331,7 @@ def password_reset_confirm(request):
             'message': 'Password reset successful. Please log in with your new password.'
         }, status=status.HTTP_200_OK)
     
+    print("Serializer Errors:", serializer.errors) # Debug print
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

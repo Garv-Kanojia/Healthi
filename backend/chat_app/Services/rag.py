@@ -1,9 +1,6 @@
 from langchain_core.prompts import PromptTemplate
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
-import requests
-import json
-import os
 import dotenv
 dotenv.load_dotenv()
 
@@ -18,7 +15,6 @@ class rag_service:
             persist_directory="./EDS_Knowledge_Base",
             embedding_function=self.embeddings
         )
-
 
     def __build_context(self, query: str):
         retrieved_docs = self.context_db.similarity_search(query, k=3)
@@ -158,12 +154,17 @@ Provide your response below:""")
                 ],
             })
         )
+
+        if response.status_code != 200:
+            print(f"LLM API Error: {response.status_code} - {response.content}")
+            raise Exception(f"LLM API failed with status {response.status_code}: {response.content}")
+            
         return json.loads(response.content)['choices'][0]['message']['content']
     
     # calling functions    
     def set_up_memoryDB(self):
         if self.memory_db is None:
-            from langchain.text_splitter import RecursiveCharacterTextSplitter
+            from langchain_text_splitters import RecursiveCharacterTextSplitter
 
             self.memory_db = Chroma(
                 persist_directory="./Long_Term_Memory",
@@ -219,8 +220,8 @@ This is the information extracted from the files provided by the user:
         self.memory_db._collection.delete(
             where={
                 "$and": [
-                    {"username": {"$eq": self.__username}},
-                    {"chat_id": {"$eq": self.__chat_id}}
+                    {"username": self.__username},
+                    {"chat_id": self.__chat_id}
                 ]
             }
         )
