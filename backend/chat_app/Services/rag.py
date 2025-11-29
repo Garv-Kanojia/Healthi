@@ -2,6 +2,9 @@ from langchain_core.prompts import PromptTemplate
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 import dotenv
+import os
+import requests
+import json
 dotenv.load_dotenv()
 
 class rag_service:
@@ -25,7 +28,16 @@ class rag_service:
         return context
     
     def __retrieve_memory(self, memory_db, splitter, short_term_memory: str, query: str):
-        retrieved_memory = memory_db.similarity_search(query, k=2, filter={"username": self.__username, "chat_id": self.__chat_id})
+        retrieved_memory = memory_db.similarity_search(
+            query, 
+            k=2, 
+            filter={
+                "$and": [
+                    {"username": self.__username},
+                    {"chat_id": self.__chat_id}
+                ]
+            }
+        )
         # Vectorize and store the short_term_memory i.e. the last conversation
         chunk = splitter.create_documents([short_term_memory], metadatas=[{"username": self.__username, "chat_id": self.__chat_id}])
         memory_db.add_documents(chunk)

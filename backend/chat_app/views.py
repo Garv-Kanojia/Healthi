@@ -75,7 +75,6 @@ class ChatDetailView(APIView):
     def patch(self, request, chat_id):
         """Update chat name."""
         chat = get_object_or_404(Chat, chat_id=chat_id, user=request.user)
-        
         new_name = request.data.get('name')
         if not new_name:
             return Response({
@@ -97,13 +96,12 @@ class ChatDetailView(APIView):
         chat = get_object_or_404(Chat, chat_id=chat_id, user=request.user)
         
         try:
+            # Delete chat (cascade will delete messages and files)
+            chat.delete()
             # Initialize RAG service and destroy chat memory
             rag = rag_service(chat_id=chat.chat_id, username=request.user.email)
             rag.set_up_memoryDB()
             rag.destroy_chat()
-            
-            # Delete chat (cascade will delete messages and files)
-            chat.delete()
             
             return Response({
                 'success': True,
@@ -116,118 +114,3 @@ class ChatDetailView(APIView):
                 'success': False,
                 'error': f'Failed to delete chat: {str(e)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-class MessageQueryView(APIView):
-    """
-    POST: Send a query to the RAG system and get AI response
-    Handles both first message and follow-up messages
-    """
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request, chat_id):
-        """Process user query and return AI response."""
-        chat = get_object_or_404(Chat, chat_id=chat_id, user=request.user)
-        
-        serializer = MessageQuerySerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response({
-                'success': False,
-                'error': serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        query = serializer.validated_data['query']
-        files = serializer.validated_data.get('files', [])
-        
-        try:
-            # Initialize RAG service
-            rag = rag_service(chat_id=chat.chat_id, username=request.user.email)
-            
-            # Retrieve the very last message based on created_at
-            last_message = chat.messages.order_by('-created_at').first()
-            file_response = None
-            
-            # Create message with placeholder response initially
-            with transaction.atomic():
-                message = Message.objects.create(chat=chat)
-                # We'll update the content with the actual response later
-                message.set_content(prompt=query, response="")
-                message.save()
-                
-                # Handle file attachments if any
-                if files:
-                    file_response = self._process_files(message, files)
-            
-            # Determine if this is first query or follow-up
-            if last_message is None:
-                # First query - include patient info if available
-                response_text = rag.first_query(query, patient_info=chat.patient_info, file_response=file_response)
-            else:
-                # Follow-up query - retrieve short-term memory
-                rag.set_up_memoryDB()
-                
-                # Get last message for short-term memory
-                short_term_memory = self._build_short_term_memory(last_message)
-                
-                response_text = rag.followup_query(query, short_term_memory, file_response=file_response)
-            
-            # Update message with actual response
-            message.set_content(prompt=query, response=response_text)
-            message.save()
-            
-            # Return response
-            return Response({
-                'success': True,
-                'message': {
-                    'prompt': query,
-                    'response': response_text,
-                    'created_at': message.created_at
-                }
-            }, status=status.HTTP_201_CREATED)
-        
-        except ValidationError as e:
-            return Response({
-                'success': False,
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        except Exception as e:
-            return Response({
-                'success': False,
-                'error': f'Failed to process query: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def _build_short_term_memory(self, message):
-        """Build short-term memory from recent message."""
-        if not message:
-            return ""
-        
-        memory_parts = []
-        content = message.get_content()
-        memory_parts.append(f"User: {content.get('prompt', '')}")
-        memory_parts.append(f"Assistant: {content.get('response', '')}")
-        return "\n\n".join(memory_parts)
-    
-    def _process_files(self, message, files):
-        """Process and save file metadata."""
-        for file in files:
-            # Determine file type
-            file_extension = file.name.split('.')[-1].lower()
-            if file_extension in ['jpg', 'jpeg', 'png', 'gif', 'bmp']:
-                file_type = 'image'
-            elif file_extension == 'pdf':
-                file_type = 'pdf'
-            else:
-                continue  # Skip unsupported files
-            
-            # Create MessageFile entry
-            MessageFile.objects.create(
-                message=message,
-                file_type=file_type,
-                file_name=file.name,
-                file_size=file.size
-            )
-
-        # I will insert the code where the file goes to the file processing API and the response will be returned accordingly.
-        response = ""
-        return response

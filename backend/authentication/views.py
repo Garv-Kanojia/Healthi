@@ -1,5 +1,5 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -37,6 +37,7 @@ from .emails import send_verification_email, send_password_reset_email
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def register(request):
     """
     Register a new user account.
@@ -94,6 +95,7 @@ def register(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def verify_email(request):
     """
     Verify email address with OTP.
@@ -149,6 +151,7 @@ def verify_email(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def login(request):
     """
     Login and receive JWT tokens.
@@ -226,6 +229,7 @@ def logout(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def password_reset_request(request):
     """
     Request password reset OTP via email.
@@ -283,6 +287,7 @@ def password_reset_request(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def password_reset_confirm(request):
     """
     Reset password with OTP.
@@ -337,6 +342,7 @@ def password_reset_confirm(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def resend_verification(request):
     """
     Resend email verification OTP.
