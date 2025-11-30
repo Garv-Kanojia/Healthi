@@ -103,8 +103,6 @@ class TranscriptionConsumer(AsyncWebsocketConsumer):
             # Collect transcribed text from segments
             transcribed_text = "".join([segment.text for segment in segments])
             
-            print(f"Transcribed: {transcribed_text.strip()}")
-            
             return {
                 'text': transcribed_text.strip(),
                 'chat_id': self.chat_id

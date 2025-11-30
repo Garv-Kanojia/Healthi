@@ -107,9 +107,9 @@ class Message(models.Model):
         db_table = 'messages'
         verbose_name = 'Message'
         verbose_name_plural = 'Messages'
-        ordering = ['-created_at']
+        ordering = ['created_at']
         indexes = [
-            models.Index(fields=['chat', '-created_at']),
+            models.Index(fields=['chat', 'created_at']),
         ]
     
     def __str__(self):

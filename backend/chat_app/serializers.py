@@ -16,7 +16,7 @@ class MessageSerializer(serializers.ModelSerializer):
     """
     Serializer for Message model with decrypted content.
     """
-    files = MessageFileSerializer(many=True, read_only=True)
+    files = serializers.SerializerMethodField()
     prompt = serializers.SerializerMethodField()
     response = serializers.SerializerMethodField()
     
@@ -34,6 +34,10 @@ class MessageSerializer(serializers.ModelSerializer):
         """Extract and decrypt response from content."""
         content = obj.get_content()
         return content.get('response', '')
+
+    def get_files(self, obj):
+        """Return list of file names."""
+        return [file.file_name for file in obj.files.all()]
 
 
 class ChatSerializer(serializers.ModelSerializer):

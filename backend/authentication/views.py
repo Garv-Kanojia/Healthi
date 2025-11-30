@@ -246,6 +246,12 @@ def password_reset_request(request):
             
             # Check if email is verified
             if not user.is_email_verified:
+                # Check rate limiting
+                if not can_resend_otp(user.email_verification_sent_at, cooldown_seconds=60):
+                    return Response({
+                        'error': 'Please wait 60 seconds before requesting a new OTP.'
+                    }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
                 # Send email verification OTP instead
                 otp = generate_otp()
                 user.email_verification_otp = otp
@@ -263,6 +269,12 @@ def password_reset_request(request):
                     'otp_sent': True
                 }, status=status.HTTP_403_FORBIDDEN)
             
+            # Check rate limiting
+            if not can_resend_otp(user.password_reset_sent_at, cooldown_seconds=60):
+                return Response({
+                    'error': 'Please wait 60 seconds before requesting a new OTP.'
+                }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
             # Generate and send password reset OTP
             otp = generate_otp()
             user.password_reset_otp = otp

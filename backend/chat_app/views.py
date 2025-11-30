@@ -65,7 +65,7 @@ class ChatDetailView(APIView):
     
     def get(self, request, chat_id):
         """Get chat details with all messages."""
-        chat = get_object_or_404(Chat, chat_id=chat_id, user=request.user)
+        chat = get_object_or_404(Chat.objects.prefetch_related('messages__files'), chat_id=chat_id, user=request.user)
         serializer = ChatDetailSerializer(chat)
         return Response({
             'success': True,
