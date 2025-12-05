@@ -10,6 +10,8 @@ import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from faster_whisper import WhisperModel
+import base64
+from chat_app.Services.file_extractor import extract_text_from_pdf, ocr_from_preprocessed_image
 
 # Initialize Faster Whisper model globally (loaded once at startup)
 print("Loading Whisper model for transcription...")
@@ -154,17 +156,30 @@ class ChatConsumer(AsyncWebsocketConsumer):
             print(f"Chat verification failed: {e}")
             await self.close(code=4004)
             return
+
+        # ✅ Initialize RAG service ONCE when websocket connects
+        self.rag = None
             
         await self.accept()
         print(f"Chat WebSocket connected: User {self.user.email}, Chat {self.chat_id}")
 
+    def __init_rag_service(self):
+        """Initialize RAG service with ChromaDB (runs in thread)."""
+        from chat_app.Services.rag import rag_service
+        rag = rag_service(chat_id=self.chat.chat_id, username=self.user.email)
+        rag.set_up_memoryDB()
+        return rag
+
     async def disconnect(self, close_code):
+        self.rag = None
         print(f"Chat WebSocket disconnected: User {self.user.email}, Code {close_code}")
 
     async def receive(self, text_data=None, bytes_data=None):
         """
         Handle incoming messages.
         """
+        if not self.rag:
+            self.rag = await asyncio.to_thread(self.__init_rag_service)
         if text_data:
             try:
                 data = json.loads(text_data)
@@ -205,7 +220,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # We need to run the blocking RAG operations in a separate thread
             return await asyncio.to_thread(self._sync_process_query, query, files)
         except Exception as e:
-            print(f"RAG processing error: {e}")
+            print(f"Query processing error: {e}")
             return {'error': str(e)}
 
     def _sync_process_query(self, query, files):
@@ -213,11 +228,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         Synchronous method to handle DB operations and RAG service.
         """
         from chat_app.models import Message, MessageFile
-        from chat_app.Services.rag import rag_service
         from django.db import transaction
 
-        # Initialize RAG service
-        rag = rag_service(chat_id=self.chat.chat_id, username=self.user.email)
+        # Use the pre-initialized RAG service from connect()
+        rag = self.rag
         
         # Retrieve the very last message based on created_at
         last_message = self.chat.messages.order_by('-created_at').first()
@@ -249,19 +263,49 @@ class ChatConsumer(AsyncWebsocketConsumer):
                             file_size=len(file_content) # Approximate size from base64
                         )
                         
-                        # Process file content (Mock API call)
-                        # In real implementation, we would send file_content to an API
-                        api_response = self._mock_file_processing_api(file_content)
-                        processed_outputs.append(f"File: {file_name}\nContent: {api_response}")
+                        # Process file content
+                        try:
+                            # Decode base64 content
+                            if ',' in file_content:
+                                file_content = file_content.split(',')[1]
+                            decoded_content = base64.b64decode(file_content)
+                            
+                            # Create temp file
+                            suffix = f".{file_extension}" if file_extension else ""
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+                                temp_file.write(decoded_content)
+                                temp_file_path = temp_file.name
+                            
+                            # Extract text
+                            extracted_text = ""
+                            if file_type == 'pdf':
+                                extracted_text = extract_text_from_pdf(temp_file_path)
+                            else:
+                                extracted_text = ocr_from_preprocessed_image(temp_file_path)
+                                
+                            if extracted_text:
+                                processed_outputs.append(f"File: {file_name}\nContent: {extracted_text}")
+                            else:
+                                processed_outputs.append(f"File: {file_name}\nContent: [No text extracted]")
+                                
+                            # Clean up
+                            if os.path.exists(temp_file_path):
+                                os.remove(temp_file_path)
+                                
+                        except Exception as e:
+                            print(f"Error processing file {file_name}: {e}")
+                            processed_outputs.append(f"File: {file_name}\nError: Failed to process file")
                 
                 if processed_outputs:
-                    file_response_text = "\n\n".join(processed_outputs)
+                    file_response_text = file_cleaned_output("File Data\n\n".join(processed_outputs))
+                    print("File Response created")
+
 
         # Determine if this is first query or follow-up
         if last_message is None:
             response_text = rag.first_query(query, patient_info=self.chat.patient_info, file_response=file_response_text)
         else:
-            rag.set_up_memoryDB()
+            # memory_db is already set up in connect() via __init_rag_service()
             
             # Get last message for short-term memory
             short_term_memory = ""
@@ -284,9 +328,37 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }
         }
 
-    def _mock_file_processing_api(self, file_content):
-        """
-        Mock function to simulate file processing API.
-        Returns "Success" as requested.
-        """
-        return "Success"
+
+def file_cleaned_output(text):
+    """
+    Clean and structure the extracted text.
+    """
+    import requests
+    import json
+    import os
+    import dotenv
+    dotenv.load_dotenv()
+
+    prompt = f"""
+Your task is to clean the medical data and return it in a structured format strictly retaining all the information. 
+
+Input: {text}
+    """
+
+    response = requests.post(
+        url="https://lightning.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {os.getenv('LIGHTNING_API_KEY')}",
+            "Content-Type": "application/json",
+        },
+        data=json.dumps({
+            "model": "google/gemini-2.5-flash",
+            "messages": [
+            {
+                "role": "user",
+                "content": [{ "type": "text", "text": prompt }]
+            },
+            ],
+        })
+    )
+    return json.loads(response.content)['choices'][0]['message']['content']

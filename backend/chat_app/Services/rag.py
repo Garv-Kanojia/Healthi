@@ -15,7 +15,7 @@ class rag_service:
         self.memory_db = None
         self.embeddings = HuggingFaceEmbeddings(model_name="ibm-granite/granite-embedding-english-r2")
         self.context_db = Chroma(
-            persist_directory="./EDS_Knowledge_Base",
+            persist_directory=".chat_app/Services/EDS_Knowledge_Base",
             embedding_function=self.embeddings
         )
 
@@ -28,6 +28,11 @@ class rag_service:
         return context
     
     def __retrieve_memory(self, memory_db, splitter, short_term_memory: str, query: str):
+        print('Retirve memory called')
+        if not memory_db:
+            print('Memory DB not initialized')
+        if not splitter:
+            print('Splitter not initialized')
         retrieved_memory = memory_db.similarity_search(
             query, 
             k=2, 
@@ -41,7 +46,9 @@ class rag_service:
         # Vectorize and store the short_term_memory i.e. the last conversation
         chunk = splitter.create_documents([short_term_memory], metadatas=[{"username": self.__username, "chat_id": self.__chat_id}])
         memory_db.add_documents(chunk)
+        print(f'Retrieved memory saved \n\n {retrieved_memory}')
         if not retrieved_memory:
+            print('Nothing to save')
             return ""
         return "\n\n".join([doc.page_content for doc in retrieved_memory])
     
@@ -179,14 +186,10 @@ Provide your response below:""")
             from langchain_text_splitters import RecursiveCharacterTextSplitter
 
             self.memory_db = Chroma(
-                persist_directory="./Long_Term_Memory",
+                persist_directory=".chat_app/Services/Long_Term_Memory",
                 embedding_function=self.embeddings
             )
-            self.splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=75)
-        return {
-            "memory_db": self.memory_db,
-            "splitter": self.splitter
-        }
+            self.splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=150)
 
     
     def first_query(self, query: str, patient_info: str = None, file_response: str = None):
