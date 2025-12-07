@@ -1,27 +1,71 @@
+"""
+Email utility functions for authentication.
+
+These functions provide a simple interface for sending emails
+using Celery tasks (async) or direct sending (sync).
+"""
+
 from django.core.mail import send_mail
 from django.conf import settings
-from django.template.loader import render_to_string
-from django.utils.html import strip_tags
 
 
 def send_verification_email(user, otp):
     """
     Send email verification OTP to user.
     
+    Uses Celery task for async sending if available,
+    falls back to synchronous sending otherwise.
+    
     Args:
         user: User object
         otp: 6-digit OTP string
     """
-    subject = 'Your EDS Assistant Verification Code'
+    try:
+        # Try to use Celery task for async sending
+        from .tasks import send_verification_email_task
+        send_verification_email_task.delay(user.email, user.name, otp)
+    except Exception:
+        # Fallback to synchronous sending if Celery is not available
+        _send_verification_email_sync(user, otp)
+
+
+def send_password_reset_email(user, otp):
+    """
+    Send password reset OTP to user.
     
-    # HTML content
+    Uses Celery task for async sending if available,
+    falls back to synchronous sending otherwise.
+    
+    Args:
+        user: User object
+        otp: 6-digit OTP string
+    """
+    try:
+        # Try to use Celery task for async sending
+        from .tasks import send_password_reset_email_task
+        send_password_reset_email_task.delay(user.email, user.name, otp)
+    except Exception:
+        # Fallback to synchronous sending if Celery is not available
+        _send_password_reset_email_sync(user, otp)
+
+
+def _send_verification_email_sync(user, otp):
+    """
+    Synchronous fallback for sending verification email.
+    
+    Args:
+        user: User object
+        otp: 6-digit OTP string
+    """
+    subject = 'Your Healthi Verification Code'
+    
     html_message = f"""
     <!DOCTYPE html>
     <html>
     <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-        <h2>Welcome to EDS Assistant, {user.name}!</h2>
+        <h2>Welcome to Healthi, {user.name}!</h2>
         
-        <p>Thank you for registering with EDS Assistant. To complete your registration, please verify your email address.</p>
+        <p>Thank you for registering with Healthi. To complete your registration, please verify your email address.</p>
         
         <div style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p style="margin: 0; font-size: 14px; color: #666;">Your verification code is:</p>
@@ -38,17 +82,16 @@ def send_verification_email(user, otp):
         </ol>
         
         <p style="color: #666; font-size: 14px; margin-top: 30px;">
-            If you didn't create an account with EDS Assistant, please ignore this email.
+            If you didn't create an account with Healthi, please ignore this email.
         </p>
     </body>
     </html>
     """
     
-    # Plain text version
     plain_message = f"""
-Welcome to EDS Assistant, {user.name}!
+Welcome to Healthi, {user.name}!
 
-Thank you for registering with EDS Assistant. To complete your registration, please verify your email address.
+Thank you for registering with Healthi. To complete your registration, please verify your email address.
 
 Your verification code is: {otp}
 
@@ -59,7 +102,7 @@ To verify your email:
 2. Enter your email: {user.email}
 3. Enter the code above
 
-If you didn't create an account with EDS Assistant, please ignore this email.
+If you didn't create an account with Healthi, please ignore this email.
     """
     
     send_mail(
@@ -72,17 +115,16 @@ If you didn't create an account with EDS Assistant, please ignore this email.
     )
 
 
-def send_password_reset_email(user, otp):
+def _send_password_reset_email_sync(user, otp):
     """
-    Send password reset OTP to user.
+    Synchronous fallback for sending password reset email.
     
     Args:
         user: User object
         otp: 6-digit OTP string
     """
-    subject = 'Your EDS Assistant Password Reset Code'
+    subject = 'Your Healthi Password Reset Code'
     
-    # HTML content
     html_message = f"""
     <!DOCTYPE html>
     <html>
@@ -91,7 +133,7 @@ def send_password_reset_email(user, otp):
         
         <p>Hi {user.name},</p>
         
-        <p>We received a request to reset your password for your EDS Assistant account.</p>
+        <p>We received a request to reset your password for your Healthi account.</p>
         
         <div style="background-color: #f4f4f4; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p style="margin: 0; font-size: 14px; color: #666;">Your password reset code is:</p>
@@ -114,19 +156,18 @@ def send_password_reset_email(user, otp):
         </p>
         
         <p style="color: #666; font-size: 14px; margin-top: 30px;">
-            This is an automated message from EDS Assistant. Please do not reply to this email.
+            This is an automated message from Healthi. Please do not reply to this email.
         </p>
     </body>
     </html>
     """
     
-    # Plain text version
     plain_message = f"""
 Password Reset Request
 
 Hi {user.name},
 
-We received a request to reset your password for your EDS Assistant account.
+We received a request to reset your password for your Healthi account.
 
 Your password reset code is: {otp}
 
@@ -140,7 +181,7 @@ To reset your password:
 
 Security Notice: If you didn't request this password reset, please ignore this email. Your account remains secure.
 
-This is an automated message from EDS Assistant. Please do not reply to this email.
+This is an automated message from Healthi. Please do not reply to this email.
     """
     
     send_mail(

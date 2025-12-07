@@ -15,7 +15,7 @@ class rag_service:
         self.memory_db = None
         self.embeddings = HuggingFaceEmbeddings(model_name="ibm-granite/granite-embedding-english-r2")
         self.context_db = Chroma(
-            persist_directory=".chat_app/Services/EDS_Knowledge_Base",
+            persist_directory="chat_app/Services/EDS_Knowledge_Base",
             embedding_function=self.embeddings
         )
 
@@ -186,7 +186,7 @@ Provide your response below:""")
             from langchain_text_splitters import RecursiveCharacterTextSplitter
 
             self.memory_db = Chroma(
-                persist_directory=".chat_app/Services/Long_Term_Memory",
+                persist_directory="chat_app/Services/Long_Term_Memory",
                 embedding_function=self.embeddings
             )
             self.splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=150)
