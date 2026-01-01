@@ -96,12 +96,18 @@ class ChatDetailView(APIView):
         chat = get_object_or_404(Chat, chat_id=chat_id, user=request.user)
         
         try:
-            # Delete chat (cascade will delete messages and files)
+            # Capture data needed for background task
+            # Import task locally to avoid potential circular import or loading issues
+            from .tasks import delete_chat_remains
+
+            # We pass email and chat_id to the task
+            username = request.user.email
+            
+            # Trigger background cleanup for vectors/heavy data
+            delete_chat_remains.delay(chat_id, username)
+            
+            # Delete chat (cascade will delete messages and files from Postgres immediately)
             chat.delete()
-            # Initialize RAG service and destroy chat memory
-            rag = rag_service(chat_id=chat.chat_id, username=request.user.email)
-            rag.set_up_memoryDB()
-            rag.destroy_chat()
             
             return Response({
                 'success': True,

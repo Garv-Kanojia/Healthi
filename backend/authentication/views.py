@@ -19,7 +19,7 @@ from .serializers import (
     UserProfileSerializer,
     UserProfileUpdateSerializer,
     ChangePasswordSerializer,
-    MedicalHistorySerializer,
+
     UserResponseSerializer,
 )
 from .utils import (
@@ -461,45 +461,4 @@ def change_password(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# ========== MEDICAL HISTORY ENDPOINTS ==========
 
-@api_view(['GET', 'POST', 'PUT'])
-@permission_classes([IsAuthenticated])
-def medical_history(request):
-    """
-    Get, add, or update medical history.
-    Endpoint: GET/POST/PUT /api/auth/user/medical-history/
-    """
-    user = request.user
-    
-    if request.method == 'GET':
-        try:
-            medical_history_obj = user.medical_history
-            serializer = MedicalHistorySerializer(medical_history_obj)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except MedicalHistory.DoesNotExist:
-            return Response({
-                'error': 'Medical history not found.'
-            }, status=status.HTTP_404_NOT_FOUND)
-    
-    elif request.method in ['POST', 'PUT']:
-        try:
-            # Try to get existing medical history
-            medical_history_obj = user.medical_history
-            serializer = MedicalHistorySerializer(medical_history_obj, data=request.data, partial=True)
-            
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
-        except MedicalHistory.DoesNotExist:
-            # Create new medical history
-            serializer = MedicalHistorySerializer(data=request.data)
-            
-            if serializer.is_valid():
-                serializer.save(user=user)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -30,6 +30,16 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             })
         return attrs
     
+    def validate_age(self, value):
+        """Custom age validation with clear messages"""
+        if value is None:
+            return value
+        if value < 18:
+            raise serializers.ValidationError('Age must be at least 18.')
+        if value > 120:
+            raise serializers.ValidationError('Age must be at most 120.')
+        return value
+    
     def create(self, validated_data):
         """Create user with hashed password"""
         validated_data.pop('password_confirm')
@@ -96,16 +106,27 @@ class ResendVerificationSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
 
 
+class MedicalHistorySerializer(serializers.ModelSerializer):
+    """Serializer for medical history"""
+    
+    class Meta:
+        model = MedicalHistory
+        fields = ['id', 'medical_notes', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     """Serializer for user profile"""
     
     has_medical_history = serializers.SerializerMethodField()
+    medical_history = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'id', 'email', 'name', 'age', 'gender', 
-            'is_email_verified', 'created_at', 'has_medical_history'
+            'is_email_verified', 'created_at', 'has_medical_history',
+            'medical_history'
         ]
         read_only_fields = ['id', 'email', 'is_email_verified', 'created_at']
     
@@ -113,18 +134,53 @@ class UserProfileSerializer(serializers.ModelSerializer):
         """Check if user has medical history"""
         return hasattr(obj, 'medical_history')
 
+    def get_medical_history(self, obj):
+        """Get medical history details if available"""
+        if hasattr(obj, 'medical_history'):
+            return MedicalHistorySerializer(obj.medical_history).data
+        return None
+
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
     """Serializer for updating user profile"""
     
+    medical_notes = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
     class Meta:
         model = User
-        fields = ['name', 'age', 'gender']
+        fields = ['name', 'age', 'gender', 'medical_notes']
         extra_kwargs = {
             'name': {'required': False},
             'age': {'required': False},
             'gender': {'required': False},
         }
+    
+    def validate_age(self, value):
+        """Custom age validation for profile updates"""
+        if value is None:
+            return value
+        if value < 18:
+            raise serializers.ValidationError('Age must be at least 18.')
+        if value > 120:
+            raise serializers.ValidationError('Age must be at most 120.')
+        return value
+
+    def update(self, instance, validated_data):
+        """Update user profile and medical history"""
+        medical_notes = validated_data.pop('medical_notes', None)
+        
+        # Update user fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update or create medical history if notes provided
+        if medical_notes is not None:
+            medical_history, created = MedicalHistory.objects.get_or_create(user=instance)
+            medical_history.medical_notes = medical_notes
+            medical_history.save()
+            
+        return instance
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -147,13 +203,7 @@ class ChangePasswordSerializer(serializers.Serializer):
         return attrs
 
 
-class MedicalHistorySerializer(serializers.ModelSerializer):
-    """Serializer for medical history"""
-    
-    class Meta:
-        model = MedicalHistory
-        fields = ['id', 'medical_notes', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
+
 
 
 class UserResponseSerializer(serializers.ModelSerializer):

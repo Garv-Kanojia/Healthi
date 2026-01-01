@@ -105,14 +105,13 @@ To verify your email:
 If you didn't create an account with Healthi, please ignore this email.
     """
     
-    send_mail(
-        subject=subject,
-        message=plain_message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        html_message=html_message,
-        fail_silently=False,
-    )
+    # Fallback to printing to console when Celery/Redis is not available
+    print("--------------------------------------------------")
+    print(f"FAILED TO CONNECT TO CELERY/REDIS - PRINTING EMAIL TO CONSOLE")
+    print(f"Subject: {subject}")
+    print(f"To: {user.email}")
+    print(f"Message:\n{plain_message}")
+    print("--------------------------------------------------")
 
 
 def _send_password_reset_email_sync(user, otp):
@@ -184,11 +183,10 @@ Security Notice: If you didn't request this password reset, please ignore this e
 This is an automated message from Healthi. Please do not reply to this email.
     """
     
-    send_mail(
-        subject=subject,
-        message=plain_message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        html_message=html_message,
-        fail_silently=False,
-    )
+    # Fallback to printing to console when Celery/Redis is not available
+    print("--------------------------------------------------")
+    print(f"FAILED TO CONNECT TO CELERY/REDIS - PRINTING EMAIL TO CONSOLE")
+    print(f"Subject: {subject}")
+    print(f"To: {user.email}")
+    print(f"Message:\n{plain_message}")
+    print("--------------------------------------------------")

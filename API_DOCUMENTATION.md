@@ -217,7 +217,7 @@ Retrieve the authenticated user's profile details.
 
 ### 2. Update User Profile
 
-Update the authenticated user's profile details.
+Update the authenticated user's profile details. You can also update your medical history notes here.
 
 - **URL:** `/api/auth/user/profile/`
 - **Method:** `PATCH`
@@ -226,7 +226,8 @@ Update the authenticated user's profile details.
   ```json
   {
     "name": "Johnathan Doe",
-    "age": 31
+    "age": 31,
+    "medical_notes": "Patient has a history of EDS Type III..."
   }
   ```
 - **Success Response (200 OK):**
@@ -237,6 +238,12 @@ Update the authenticated user's profile details.
     "name": "Johnathan Doe",
     "age": 31,
     "gender": "Male",
+    "medical_history": {
+        "id": 1,
+        "medical_notes": "Patient has a history of EDS Type III...",
+        "created_at": "...",
+        "updated_at": "..."
+    },
     ...
   }
   ```
@@ -263,29 +270,7 @@ Change the authenticated user's password.
   }
   ```
 
-### 4. Medical History
 
-Get, create, or update the user's medical history.
-
-- **URL:** `/api/auth/user/medical-history/`
-- **Method:** `GET`, `POST`, `PUT`
-- **Auth Required:** Yes
-- **Request Body (POST/PUT):**
-  ```json
-  {
-    "medical_notes": "Patient has a history of EDS Type III..."
-  }
-  ```
-- **Success Response (200 OK):**
-  ```json
-  {
-    "id": 1,
-    "user": 1,
-    "medical_notes": "Patient has a history of EDS Type III...",
-    "created_at": "...",
-    "updated_at": "..."
-  }
-  ```
 
 ---
 

@@ -24,6 +24,5 @@ urlpatterns = [
     path('user/profile/', views.user_profile, name='user_profile'),
     path('user/change-password/', views.change_password, name='change_password'),
     
-    # Medical history endpoints
-    path('user/medical-history/', views.medical_history, name='medical_history'),
+
 ]

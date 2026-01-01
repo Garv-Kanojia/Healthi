@@ -159,7 +159,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         # ✅ Initialize RAG service ONCE when websocket connects
         self.rag = None
-            
+
         await self.accept()
         print(f"Chat WebSocket connected: User {self.user.email}, Chat {self.chat_id}")
 
@@ -298,7 +298,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 
                 if processed_outputs:
                     file_response_text = file_cleaned_output("File Data\n\n".join(processed_outputs))
-                    print("File Response created")
+                    rag.add_file_to_memory(file_response_text)
+                    print("File Response created and added to memory")
 
 
         # Determine if this is first query or follow-up
