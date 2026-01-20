@@ -8,7 +8,6 @@ def delete_chat_remains(chat_id, username):
     """
     try:
         rag = rag_service(chat_id=chat_id, username=username)
-        rag.set_up_memoryDB()
         result = rag.destroy_chat()
         print(f"Chat {chat_id} memory destroyed: {result}")
         return f"Chat {chat_id} cleanup successful"

@@ -8,5 +8,4 @@ from . import consumers
 
 websocket_urlpatterns = [
     path('ws/transcribe/<str:chat_id>/', consumers.TranscriptionConsumer.as_asgi()),
-    path('ws/chat/<str:chat_id>/', consumers.ChatConsumer.as_asgi()),
 ]

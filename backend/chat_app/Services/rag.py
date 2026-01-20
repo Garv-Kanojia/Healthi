@@ -1,6 +1,7 @@
 from langchain_core.prompts import PromptTemplate
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 import dotenv
 import os
 import requests
@@ -8,17 +9,22 @@ import json
 import re
 dotenv.load_dotenv()
 
+# Global Dependencies
+embeddings = HuggingFaceEmbeddings(model_name="ibm-granite/granite-embedding-english-r2")
+splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=150)
+memory_db = Chroma(
+    persist_directory="chat_app/Services/Long_Term_Memory",
+    embedding_function=embeddings
+)
+context_db = Chroma(
+    persist_directory="chat_app/Services/EDS_Knowledge_Base",
+    embedding_function=embeddings
+)
+
 class rag_service:
     def __init__(self, chat_id: str, username: str):
         self.__chat_id = chat_id
         self.__username = username
-        self.splitter = None
-        self.memory_db = None
-        self.embeddings = HuggingFaceEmbeddings(model_name="ibm-granite/granite-embedding-english-r2")
-        self.context_db = Chroma(
-            persist_directory="chat_app/Services/EDS_Knowledge_Base",
-            embedding_function=self.embeddings
-        )
 
     def __build_context(self, query: str):
         prompt = rag_service.__classification().format(
@@ -40,7 +46,7 @@ class rag_service:
             eds_related = "True"
         
         if eds_related == "True":
-            retrieved_docs = self.context_db.similarity_search(query, k=3)
+            retrieved_docs = context_db.similarity_search(query, k=3)
             context = "\n\n".join([
                 f"[Source {i+1}: {doc.metadata.get('source', 'Unknown')}]\nData\n{doc.page_content}"
                 for i, doc in enumerate(retrieved_docs)
@@ -51,7 +57,7 @@ class rag_service:
             context = "Non Medical and non EDS related query. If user is greeting, introduce yourself and inform your role according to your performa." 
         return context
 
-    def __retrieve_memory(self, memory_db, splitter, short_term_memory: str, query: str):
+    def __retrieve_memory(self, short_term_memory: str, query: str):
         prompt = rag_service.__classification().format(
             format_description="""{
     "Memory_Needed": True/False
@@ -251,27 +257,13 @@ Provide your response below:""")
             "Success": True,
             "Response": json.loads(response.content)['choices'][0]['message']['content']
         }
-    
-    # calling functions    
-    def set_up_memoryDB(self):
-        if self.memory_db is None:
-            from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-            self.memory_db = Chroma(
-                persist_directory="chat_app/Services/Long_Term_Memory",
-                embedding_function=self.embeddings
-            )
-            self.splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=150)
 
     def add_file_to_memory(self, file_content: str):
         if not file_content:
             return
-        
-        if self.memory_db is None or self.splitter is None:
-            self.set_up_memoryDB()
 
-        chunk = self.splitter.create_documents([file_content], metadatas=[{"username": self.__username, "chat_id": self.__chat_id}])
-        self.memory_db.add_documents(chunk)
+        chunk = splitter.create_documents([file_content], metadatas=[{"username": self.__username, "chat_id": self.__chat_id}])
+        memory_db.add_documents(chunk)
 
     
     def first_query(self, query: str, patient_info: str = None, file_response: str = None):
@@ -302,7 +294,7 @@ This is the information extracted from the files provided by the user:
         # Retriieve documents froom corpus
         context = self.__build_context(query)
         # Retrieve relevant documents from Long_Term_Memory
-        long_term_memory = self.__retrieve_memory(memory_db=self.memory_db, splitter=self.splitter, short_term_memory=short_term_memory, query=query)
+        long_term_memory = self.__retrieve_memory(short_term_memory=short_term_memory, query=query)
         prompt_template = rag_service.followup_prompt_template()
         prompt = prompt_template.format(
             context=context,
@@ -314,7 +306,7 @@ This is the information extracted from the files provided by the user:
         return rag_service.call_llm_api(prompt)
     
     def destroy_chat(self):
-        self.memory_db._collection.delete(
+        memory_db._collection.delete(
             where={
                 "$and": [
                     {"username": self.__username},
