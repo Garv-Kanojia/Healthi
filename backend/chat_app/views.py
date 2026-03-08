@@ -208,12 +208,10 @@ class ChatInteractionView(APIView):
                             file_extension = file_name.split('.')[-1].lower()
                             file_type = 'pdf' if file_extension == 'pdf' else 'image'
                             
-                            # Save metadata only
+                            # Save filename only (with extension)
                             MessageFile.objects.create(
                                 message=message,
-                                file_type=file_type,
-                                file_name=file_name,
-                                file_size=len(file_content) # Approximate size from base64
+                                file_name=file_name
                             )
                             
                             # Process file content

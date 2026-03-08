@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.utils import timezone
-from authentication.models import User, MedicalHistory
+from authentication.models import User
 import time
 
 
@@ -214,8 +214,8 @@ class UserModelTest(TestCase):
         self.assertEqual(superuser.email, 'admin@example.com')
 
 
-class MedicalHistoryModelTest(TestCase):
-    """Test cases for the MedicalHistory model"""
+class UserMedicalNotesTest(TestCase):
+    """Test cases for medical_notes field on User model"""
     
     def setUp(self):
         """Set up test data"""
@@ -225,106 +225,56 @@ class MedicalHistoryModelTest(TestCase):
             name='Medical Test User'
         )
     
-    def test_create_medical_history(self):
-        """Test creating a medical history record"""
-        history = MedicalHistory.objects.create(
-            user=self.user,
+    def test_create_user_with_medical_notes(self):
+        """Test creating a user with medical notes"""
+        user = User.objects.create_user(
+            email='test_medical@example.com',
+            password='TestPass123',
+            name='Test User',
             medical_notes='Diagnosed with EDS Type III'
         )
         
-        self.assertEqual(history.user, self.user)
-        self.assertEqual(history.medical_notes, 'Diagnosed with EDS Type III')
-        self.assertIsNotNone(history.created_at)
-        self.assertIsNotNone(history.updated_at)
+        self.assertEqual(user.medical_notes, 'Diagnosed with EDS Type III')
     
-    def test_medical_history_one_to_one_relationship(self):
-        """Test that medical history has one-to-one relationship with user"""
-        history = MedicalHistory.objects.create(
-            user=self.user,
-            medical_notes='First history'
-        )
-        
-        # Try to create another medical history for the same user
-        with self.assertRaises(IntegrityError):
-            MedicalHistory.objects.create(
-                user=self.user,
-                medical_notes='Second history'
-            )
+    def test_medical_notes_default_empty(self):
+        """Test that medical_notes defaults to empty string"""
+        self.assertEqual(self.user.medical_notes, '')
     
-    def test_medical_history_string_representation(self):
-        """Test the __str__ method of MedicalHistory model"""
-        history = MedicalHistory.objects.create(
-            user=self.user,
-            medical_notes='Test notes'
-        )
-        
-        expected_str = f"Medical History for {self.user.email}"
-        self.assertEqual(str(history), expected_str)
-    
-    def test_medical_history_cascade_delete(self):
-        """Test that medical history is deleted when user is deleted"""
-        history = MedicalHistory.objects.create(
-            user=self.user,
-            medical_notes='Test notes'
-        )
-        
-        history_id = history.id
-        
-        # Delete the user
-        self.user.delete()
-        
-        # Medical history should also be deleted
-        with self.assertRaises(MedicalHistory.DoesNotExist):
-            MedicalHistory.objects.get(id=history_id)
-    
-    def test_medical_history_related_name(self):
-        """Test accessing medical history through user's related_name"""
-        history = MedicalHistory.objects.create(
-            user=self.user,
-            medical_notes='Test notes'
-        )
-        
-        # Access medical history through user
-        self.assertEqual(self.user.medical_history, history)
-        self.assertEqual(self.user.medical_history.medical_notes, 'Test notes')
-    
-    def test_medical_history_optional_notes(self):
+    def test_medical_notes_can_be_blank(self):
         """Test that medical_notes can be blank"""
-        history = MedicalHistory.objects.create(
-            user=self.user,
-            medical_notes=''
-        )
-        
-        self.assertEqual(history.medical_notes, '')
-        history.full_clean()  # Should not raise ValidationError
+        self.user.medical_notes = ''
+        self.user.full_clean()  # Should not raise ValidationError
     
-    def test_medical_history_update(self):
-        """Test updating medical history"""
-        history = MedicalHistory.objects.create(
-            user=self.user,
-            medical_notes='Initial notes'
-        )
+    def test_medical_notes_update(self):
+        """Test updating medical notes"""
+        self.user.medical_notes = 'Initial notes'
+        self.user.save()
         
-        created_at = history.created_at
+        updated_at = self.user.updated_at
         
         # Ensure some time passes
         time.sleep(0.1)
 
         # Update notes
-        history.medical_notes = 'Updated notes with more information'
-        history.save()
-        history.refresh_from_db()
+        self.user.medical_notes = 'Updated notes with more information'
+        self.user.save()
+        self.user.refresh_from_db()
         
-        self.assertEqual(history.medical_notes, 'Updated notes with more information')
-        # created_at should remain the same
-        self.assertEqual(history.created_at, created_at)
+        self.assertEqual(self.user.medical_notes, 'Updated notes with more information')
         # updated_at should be newer
-        self.assertGreater(history.updated_at, created_at)
+        self.assertGreater(self.user.updated_at, updated_at)
     
-    def test_medical_history_without_user_fails(self):
-        """Test that medical history requires a user"""
-        with self.assertRaises(IntegrityError):
-            MedicalHistory.objects.create(
-                user=None,
-                medical_notes='Test notes'
-            )
+    def test_medical_notes_deleted_with_user(self):
+        """Test that medical notes are deleted when user is deleted"""
+        self.user.medical_notes = 'Test notes'
+        self.user.save()
+        
+        user_id = self.user.id
+        
+        # Delete the user
+        self.user.delete()
+        
+        # User (and their medical notes) should be deleted
+        with self.assertRaises(User.DoesNotExist):
+            User.objects.get(id=user_id)
+

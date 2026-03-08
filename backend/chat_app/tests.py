@@ -80,72 +80,33 @@ class MessageFileModelTest(TestCase):
         self.chat = Chat.objects.create(user=self.user, name="Test Chat")
         self.message = Message.objects.create(chat=self.chat, content="{}")
 
-    def test_create_image_file(self):
+    def test_create_file_with_pdf_extension(self):
         file = MessageFile.objects.create(
             message=self.message,
-            file_type='image',
-            file_name='test.jpg',
-            file_size=1024
+            file_name='report.pdf'
         )
-        self.assertEqual(file.file_type, 'image')
-        self.assertEqual(file.file_size, 1024)
+        self.assertEqual(file.file_name, 'report.pdf')
+        self.assertEqual(file.message, self.message)
+        self.assertEqual(str(file), 'report.pdf')
 
-    def test_image_limit_constraint(self):
-        # Create 5 images
-        for i in range(5):
-            MessageFile.objects.create(
-                message=self.message,
-                file_type='image',
-                file_name=f'img{i}.jpg',
-                file_size=100
-            )
+    def test_create_file_with_image_extension(self):
+        file = MessageFile.objects.create(
+            message=self.message,
+            file_name='scan.jpeg'
+        )
+        self.assertEqual(file.file_name, 'scan.jpeg')
+        self.assertEqual(file.message, self.message)
+        self.assertEqual(str(file), 'scan.jpeg')
+
+    def test_create_multiple_files(self):
+        # Create multiple files for a single message
+        files = [
+            MessageFile.objects.create(message=self.message, file_name='doc1.pdf'),
+            MessageFile.objects.create(message=self.message, file_name='doc2.pdf'),
+            MessageFile.objects.create(message=self.message, file_name='image1.jpg'),
+            MessageFile.objects.create(message=self.message, file_name='image2.png'),
+        ]
         
-        # Try to create 6th image
-        with self.assertRaises(ValidationError):
-            MessageFile.objects.create(
-                message=self.message,
-                file_type='image',
-                file_name='img6.jpg',
-                file_size=100
-            )
-
-    def test_pdf_limit_constraint(self):
-        # Create 2 PDFs
-        for i in range(2):
-            MessageFile.objects.create(
-                message=self.message,
-                file_type='pdf',
-                file_name=f'doc{i}.pdf',
-                file_size=100
-            )
-        
-        # Try to create 3rd PDF
-        with self.assertRaises(ValidationError):
-            MessageFile.objects.create(
-                message=self.message,
-                file_type='pdf',
-                file_name='doc3.pdf',
-                file_size=100
-            )
-
-    def test_image_size_limit(self):
-        # 10MB + 1 byte
-        large_size = 10 * 1024 * 1024 + 1
-        with self.assertRaises(ValidationError):
-            MessageFile.objects.create(
-                message=self.message,
-                file_type='image',
-                file_name='large.jpg',
-                file_size=large_size
-            )
-
-    def test_pdf_size_limit(self):
-        # 25MB + 1 byte
-        large_size = 25 * 1024 * 1024 + 1
-        with self.assertRaises(ValidationError):
-            MessageFile.objects.create(
-                message=self.message,
-                file_type='pdf',
-                file_name='large.pdf',
-                file_size=large_size
-            )
+        self.assertEqual(self.message.files.count(), 4)
+        for file in files:
+            self.assertIn(file, self.message.files.all())

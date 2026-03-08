@@ -7,7 +7,7 @@ from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import transaction
 
-from .models import User, MedicalHistory
+from .models import User
 from .serializers import (
     UserRegistrationSerializer,
     EmailVerificationSerializer,
@@ -171,6 +171,9 @@ def login(request):
                 'error': 'Invalid credentials.'
             }, status=status.HTTP_401_UNAUTHORIZED)
         
+        # Refresh user from database to ensure all fields are loaded
+        user.refresh_from_db()
+        
         # Check if email is verified
         if not user.is_email_verified:
             # Generate and send new OTP
@@ -194,12 +197,9 @@ def login(request):
         # Generate tokens
         refresh = RefreshToken.for_user(user)
         
-        # Update last login
-        user.last_login_at = timezone.now()
-        user.save()
-        
         # Prepare response
         user_data = UserResponseSerializer(user).data
+
         
         return Response({
             'access': str(refresh.access_token),
@@ -412,6 +412,9 @@ def user_profile(request):
     Endpoint: GET/PATCH /api/auth/user/profile/
     """
     user = request.user
+    
+    # Refresh user from database to ensure all fields are loaded
+    user.refresh_from_db()
     
     if request.method == 'GET':
         serializer = UserProfileSerializer(user)

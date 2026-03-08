@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from unittest.mock import patch
 
-from authentication.models import User, MedicalHistory
+from authentication.models import User
 from authentication.utils import generate_otp
 
 
@@ -278,10 +278,6 @@ class LoginAPITest(APITestCase):
         self.assertIn('access', response.data)
         self.assertIn('refresh', response.data)
         self.assertIn('user', response.data)
-        
-        # Check last_login_at was updated
-        self.verified_user.refresh_from_db()
-        self.assertIsNotNone(self.verified_user.last_login_at)
     
     def test_login_with_invalid_credentials(self):
         """Test login fails with invalid credentials"""
@@ -783,8 +779,8 @@ class ChangePasswordAPITest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
 
-class MedicalHistoryAPITest(APITestCase):
-    """Test cases for medical history endpoints"""
+class MedicalNotesProfileAPITest(APITestCase):
+    """Test cases for medical notes through user profile endpoint"""
     
     def setUp(self):
         """Set up test data"""
@@ -795,92 +791,62 @@ class MedicalHistoryAPITest(APITestCase):
             is_email_verified=True
         )
         self.client.force_authenticate(user=self.user)
-        self.url = reverse('authentication:medical_history')
+        self.url = reverse('authentication:user_profile')
     
-    def test_create_medical_history(self):
-        """Test creating medical history"""
+    def test_update_medical_notes(self):
+        """Test updating medical notes through profile"""
         data = {'medical_notes': 'Diagnosed with EDS Type III in 2020'}
         
-        response = self.client.post(self.url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.patch(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('medical_notes', response.data)
         
-        # Check medical history was created
-        history = MedicalHistory.objects.get(user=self.user)
-        self.assertEqual(history.medical_notes, data['medical_notes'])
+        # Check medical notes were updated
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.medical_notes, data['medical_notes'])
     
-    def test_update_medical_history(self):
-        """Test updating existing medical history"""
-        # Create initial medical history
-        MedicalHistory.objects.create(
-            user=self.user,
-            medical_notes='Initial notes'
-        )
-        
-        data = {'medical_notes': 'Updated medical notes with more information'}
-        
-        response = self.client.put(self.url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        
-        # Check medical history was updated
-        history = MedicalHistory.objects.get(user=self.user)
-        self.assertEqual(history.medical_notes, data['medical_notes'])
-    
-    def test_get_medical_history(self):
-        """Test getting medical history"""
-        # Create medical history
-        MedicalHistory.objects.create(
-            user=self.user,
-            medical_notes='Test medical notes'
-        )
+    def test_get_medical_notes_in_profile(self):
+        """Test getting medical notes in profile response"""
+        self.user.medical_notes = 'Test medical notes'
+        self.user.save()
         
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['medical_notes'], 'Test medical notes')
     
-    def test_get_medical_history_not_found(self):
-        """Test getting medical history when it doesn't exist"""
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-    
-    def test_create_medical_history_with_empty_notes(self):
-        """Test creating medical history with empty notes"""
+    def test_update_medical_notes_with_empty_notes(self):
+        """Test updating with empty medical notes"""
+        self.user.medical_notes = 'Old notes'
+        self.user.save()
+        
         data = {'medical_notes': ''}
         
-        response = self.client.post(self.url, data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.patch(self.url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.medical_notes, '')
     
-    def test_medical_history_unauthenticated(self):
-        """Test medical history endpoints fail when unauthenticated"""
+    def test_has_medical_history_flag(self):
+        """Test has_medical_history flag in profile response"""
+        # Without medical notes
+        response = self.client.get(self.url)
+        self.assertFalse(response.data['has_medical_history'])
+        
+        # With medical notes
+        self.user.medical_notes = 'Some notes'
+        self.user.save()
+        
+        response = self.client.get(self.url)
+        self.assertTrue(response.data['has_medical_history'])
+    
+    def test_medical_notes_unauthenticated(self):
+        """Test medical notes update fails when unauthenticated"""
         self.client.force_authenticate(user=None)
         
-        # Test create
-        response = self.client.post(self.url, {'medical_notes': 'Test'}, format='json')
+        data = {'medical_notes': 'Test'}
+        response = self.client.patch(self.url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        
-        # Test get
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-    
-    def test_medical_history_belongs_to_correct_user(self):
-        """Test that users can only access their own medical history"""
-        # Create another user with medical history
-        other_user = User.objects.create_user(
-            email='other@example.com',
-            password='TestPass123',
-            name='Other User',
-            is_email_verified=True
-        )
-        MedicalHistory.objects.create(
-            user=other_user,
-            medical_notes='Other user notes'
-        )
-        
-        # Current user tries to get medical history
-        response = self.client.get(self.url)
-        
-        # Should return 404 since current user has no medical history
-        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
 class JWTTokenRefreshAPITest(APITestCase):

@@ -204,13 +204,8 @@ class Message(models.Model):
 class MessageFile(models.Model):
     """
     Model for storing file metadata associated with messages.
-    Stores only file names and metadata; actual file data is sent to microservice for processing.
+    Stores only the message reference and complete filename with extension.
     """
-    
-    FILE_TYPE_CHOICES = [
-        ('image', 'Image'),
-        ('pdf', 'PDF'),
-    ]
     
     message = models.ForeignKey(
         Message,
@@ -218,20 +213,10 @@ class MessageFile(models.Model):
         related_name='files'
     )
     
-    # File metadata
-    file_type = models.CharField(
-        max_length=10,
-        choices=FILE_TYPE_CHOICES,
-        help_text="Type of file: image or pdf"
-    )
-    
+    # File name with extension (e.g., abc.pdf, xyz.jpeg)
     file_name = models.CharField(
         max_length=255,
-        help_text="Original filename"
-    )
-    
-    file_size = models.PositiveIntegerField(
-        help_text="File size in bytes"
+        help_text="Complete filename with extension (e.g., report.pdf, scan.jpeg)"
     )
     
     class Meta:
@@ -244,40 +229,4 @@ class MessageFile(models.Model):
         ]
     
     def __str__(self):
-        return f"{self.file_name} ({self.file_type})"
-    
-    def clean(self):
-        """
-        Validate file constraints.
-        """
-        # Check number of files per message
-        if not self.pk:  # Only check for new files
-            message_files = MessageFile.objects.filter(message=self.message)
-            
-            if self.file_type == 'image':
-                image_count = message_files.filter(file_type='image').count()
-                if image_count >= 5:
-                    raise ValidationError(
-                        "A message can have a maximum of 5 images."
-                    )
-                # Validate image size (10MB max)
-                if self.file_size > 10 * 1024 * 1024:
-                    raise ValidationError(
-                        "Image file size cannot exceed 10MB."
-                    )
-            
-            elif self.file_type == 'pdf':
-                pdf_count = message_files.filter(file_type='pdf').count()
-                if pdf_count >= 2:
-                    raise ValidationError(
-                        "A message can have a maximum of 2 PDFs."
-                    )
-                # Validate PDF size (25MB max)
-                if self.file_size > 25 * 1024 * 1024:
-                    raise ValidationError(
-                        "PDF file size cannot exceed 25MB."
-                    )
-    
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        super().save(*args, **kwargs)
+        return self.file_name

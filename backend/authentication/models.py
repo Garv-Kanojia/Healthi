@@ -37,6 +37,7 @@ class User(AbstractUser):
     """
     Custom User model using email as the unique identifier instead of username.
     Includes OTP fields for email verification and password reset.
+    Medical history is stored directly in this model.
     """
     
     # Gender choices
@@ -51,6 +52,10 @@ class User(AbstractUser):
     username = None
     email = models.EmailField(unique=True, db_index=True)
     
+    # Remove unnecessary inherited fields
+    first_name = None
+    last_name = None
+    
     # Basic Information
     name = models.CharField(max_length=150)
     age = models.PositiveIntegerField(
@@ -59,6 +64,9 @@ class User(AbstractUser):
         validators=[MinValueValidator(1), MaxValueValidator(120)]
     )
     gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=False)
+    
+    # Medical History - stored directly in user table
+    medical_notes = models.TextField(blank=True, default='')
     
     # Authentication Fields
     is_email_verified = models.BooleanField(default=False)
@@ -74,7 +82,6 @@ class User(AbstractUser):
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    last_login_at = models.DateTimeField(null=True, blank=True)
     
     # Settings
     USERNAME_FIELD = 'email'
@@ -90,31 +97,3 @@ class User(AbstractUser):
     
     def __str__(self):
         return f"{self.email} - {self.name}"
-
-
-class MedicalHistory(models.Model):
-    """
-    Medical history model for storing optional medical information.
-    One-to-one relationship with User model.
-    """
-    
-    user = models.OneToOneField(
-        User, 
-        on_delete=models.CASCADE, 
-        related_name='medical_history'
-    )
-    
-    # Medical Information - Single optional text field
-    medical_notes = models.TextField(blank=True)
-    
-    # Metadata
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        db_table = 'medical_history'
-        verbose_name = 'Medical History'
-        verbose_name_plural = 'Medical Histories'
-    
-    def __str__(self):
-        return f"Medical History for {self.user.email}"

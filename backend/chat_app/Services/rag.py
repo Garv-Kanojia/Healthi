@@ -1,7 +1,8 @@
 from langchain_core.prompts import PromptTemplate
 from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_pinecone import PineconeVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pinecone import Pinecone
 import dotenv
 import os
 import requests
@@ -10,15 +11,25 @@ import re
 dotenv.load_dotenv()
 
 # Global Dependencies
-embeddings = HuggingFaceEmbeddings(model_name="ibm-granite/granite-embedding-english-r2")
+embeddings = HuggingFaceEmbeddings(model_name="ibm-granite/granite-embedding-small-english-r2")
 splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=150)
-memory_db = Chroma(
-    persist_directory="chat_app/Services/Long_Term_Memory",
-    embedding_function=embeddings
+
+# Initialize Pinecone
+pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+pinecone_index = pc.Index("eds-knowledge-base")
+
+# Memory namespace for long-term memory storage
+memory_db = PineconeVectorStore(
+    index=pinecone_index,
+    embedding=embeddings,
+    namespace="memory"
 )
-context_db = Chroma(
-    persist_directory="chat_app/Services/EDS_Knowledge_Base",
-    embedding_function=embeddings
+
+# Knowledge namespace for EDS knowledge base
+context_db = PineconeVectorStore(
+    index=pinecone_index,
+    embedding=embeddings,
+    namespace="knowledge"
 )
 
 class rag_service:
@@ -306,12 +317,12 @@ This is the information extracted from the files provided by the user:
         return rag_service.call_llm_api(prompt)
     
     def destroy_chat(self):
-        memory_db._collection.delete(
-            where={
-                "$and": [
-                    {"username": self.__username},
-                    {"chat_id": self.__chat_id}
-                ]
-            }
+        # Delete vectors from Pinecone memory namespace using metadata filter
+        pinecone_index.delete(
+            filter={
+                "username": {"$eq": self.__username},
+                "chat_id": {"$eq": self.__chat_id}
+            },
+            namespace="memory"
         )
         return {"status": "success"}

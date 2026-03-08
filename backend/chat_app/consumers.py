@@ -1,5 +1,5 @@
 """
-WebSocket consumer for real-time audio transcription using Faster Whisper.
+WebSocket consumer for real-time audio transcription using Hugging Face Space.
 Receives 16kHz audio chunks from frontend and transcribes them in real-time.
 """
 
@@ -9,19 +9,20 @@ import os
 import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from faster_whisper import WhisperModel
+from gradio_client import Client, handle_file
 
 
-# Initialize Faster Whisper model globally (loaded once at startup)
-print("Loading Whisper model for transcription...")
-whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
-print("Whisper model loaded successfully!")
+# Initialize Hugging Face Client for transcription (private space requires token)
+HF_TOKEN = os.environ.get("HF_TOKEN")
+print("Initializing Hugging Face Client for transcription...")
+HF_CLIENT = Client("Megatron14/Audio_Transcription", hf_token=HF_TOKEN)
+print("Hugging Face Client initialized successfully!")
 
 
 class TranscriptionConsumer(AsyncWebsocketConsumer):
     """
     WebSocket consumer for audio transcription.
-    Handles real-time audio streaming and transcription using Faster Whisper.
+    Handles real-time audio streaming and transcription using Hugging Face Space.
     """
     
     async def connect(self):
@@ -72,10 +73,30 @@ class TranscriptionConsumer(AsyncWebsocketConsumer):
                 'error': 'Expected audio data as bytes'
             }))
     
+    def call_hf_api(self, file_path):
+        """
+        Call Hugging Face Space API to transcribe audio.
+        
+        Args:
+            file_path: Path to the audio file to transcribe
+        
+        Returns:
+            str: Transcription result or error message
+        """
+        try:
+            # The api_name depends on your Gradio app, usually /predict
+            result = HF_CLIENT.predict(
+                audio_filepath=handle_file(file_path),
+                api_name="/predict"
+            )
+            return result
+        except Exception as e:
+            return str(e)
+    
     async def transcribe_audio(self, audio_data):
         """
-        Transcribe audio data using Faster Whisper.
-        Saves audio to temporary file, transcribes, and cleans up.
+        Transcribe audio data using Hugging Face Space API.
+        Saves audio to temporary file, sends to HF Space, and cleans up.
         
         Args:
             audio_data: Audio bytes in WAV format (16kHz)
@@ -91,23 +112,23 @@ class TranscriptionConsumer(AsyncWebsocketConsumer):
                 temp_audio.write(audio_data)
                 temp_audio_path = temp_audio.name
             
-            # Transcribe using Faster Whisper in thread pool (blocking operation)
-            segments, info = await asyncio.to_thread(
-                whisper_model.transcribe,
-                temp_audio_path,
-                language="en",
-                beam_size=5,
-                vad_filter=True,
-                vad_parameters=dict(min_silence_duration_ms=500)
+            # Transcribe using HF Space API in thread pool (blocking operation)
+            transcribed_text = await asyncio.to_thread(
+                self.call_hf_api,
+                temp_audio_path
             )
             
-            # Collect transcribed text from segments
-            transcribed_text = "".join([segment.text for segment in segments])
-            
-            return {
-                'text': transcribed_text.strip(),
-                'chat_id': self.chat_id
-            }
+            # Check if result is an error message
+            if transcribed_text and not transcribed_text.startswith("Error"):
+                return {
+                    'text': transcribed_text.strip() if isinstance(transcribed_text, str) else str(transcribed_text).strip(),
+                    'chat_id': self.chat_id
+                }
+            else:
+                return {
+                    'text': '',
+                    'error': transcribed_text
+                }
         
         except Exception as e:
             print(f"Transcription error: {e}")
@@ -131,5 +152,3 @@ class TranscriptionConsumer(AsyncWebsocketConsumer):
         """
         from chat_app.models import Chat
         return Chat.objects.get(chat_id=self.chat_id, user=self.user)
-
-

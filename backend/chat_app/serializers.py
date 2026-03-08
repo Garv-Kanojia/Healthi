@@ -8,7 +8,7 @@ class MessageFileSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = MessageFile
-        fields = ['id', 'file_type', 'file_name', 'file_size']
+        fields = ['id', 'file_name']
         read_only_fields = ['id']
 
 
@@ -124,12 +124,8 @@ class ChatCreateSerializer(serializers.ModelSerializer):
                 patient_info_parts.append(f"Gender: {user.gender}")
             
             # Get medical history if exists
-            try:
-                medical_history = user.medical_history
-                if medical_history.medical_notes:
-                    patient_info_parts.append(f"Clinical Notes: {medical_history.medical_notes}")
-            except:
-                pass  # No medical history
+            if user.medical_notes:
+                patient_info_parts.append(f"Clinical Notes: {user.medical_notes}")
         else:
             # Use manual input
             if age is not None:
@@ -159,8 +155,7 @@ class MessageQuerySerializer(serializers.Serializer):
     query = serializers.CharField(required=True, max_length=5000)
     files = serializers.ListField(
         child=serializers.FileField(),
-        required=False,
-        max_length=7  # Max 5 images + 2 PDFs
+        required=False
     )
 
 
