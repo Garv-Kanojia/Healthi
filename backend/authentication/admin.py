@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import User, MedicalHistory
+from .models import User
 
 
 @admin.register(User)
@@ -9,12 +9,13 @@ class UserAdmin(BaseUserAdmin):
     
     list_display = ['email', 'name', 'is_email_verified', 'is_staff', 'created_at']
     list_filter = ['is_email_verified', 'is_staff', 'is_superuser', 'gender', 'created_at']
-    search_fields = ['email', 'name']
+    search_fields = ['email', 'name', 'medical_notes']
     ordering = ['-created_at']
     
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
         ('Personal Info', {'fields': ('name', 'age', 'gender')}),
+        ('Medical History', {'fields': ('medical_notes',)}),
         ('Email Verification', {
             'fields': (
                 'is_email_verified', 
@@ -33,7 +34,7 @@ class UserAdmin(BaseUserAdmin):
         ('Permissions', {
             'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')
         }),
-        ('Important Dates', {'fields': ('last_login_at', 'created_at', 'updated_at')}),
+        ('Important Dates', {'fields': ('created_at', 'updated_at')}),
     )
     
     readonly_fields = ['created_at', 'updated_at']
@@ -45,16 +46,3 @@ class UserAdmin(BaseUserAdmin):
         }),
     )
 
-
-@admin.register(MedicalHistory)
-class MedicalHistoryAdmin(admin.ModelAdmin):
-    """Admin configuration for Medical History model"""
-    
-    list_display = ['user', 'created_at', 'updated_at']
-    search_fields = ['user__email', 'user__name', 'medical_notes']
-    readonly_fields = ['created_at', 'updated_at']
-    
-    fieldsets = (
-        (None, {'fields': ('user', 'medical_notes')}),
-        ('Timestamps', {'fields': ('created_at', 'updated_at')}),
-    )

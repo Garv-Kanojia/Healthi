@@ -1,5 +1,5 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -7,7 +7,7 @@ from django.contrib.auth import authenticate
 from django.utils import timezone
 from django.db import transaction
 
-from .models import User, MedicalHistory
+from .models import User
 from .serializers import (
     UserRegistrationSerializer,
     EmailVerificationSerializer,
@@ -19,7 +19,7 @@ from .serializers import (
     UserProfileSerializer,
     UserProfileUpdateSerializer,
     ChangePasswordSerializer,
-    MedicalHistorySerializer,
+
     UserResponseSerializer,
 )
 from .utils import (
@@ -37,6 +37,7 @@ from .emails import send_verification_email, send_password_reset_email
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def register(request):
     """
     Register a new user account.
@@ -94,6 +95,7 @@ def register(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def verify_email(request):
     """
     Verify email address with OTP.
@@ -149,6 +151,7 @@ def verify_email(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def login(request):
     """
     Login and receive JWT tokens.
@@ -167,6 +170,9 @@ def login(request):
             return Response({
                 'error': 'Invalid credentials.'
             }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # Refresh user from database to ensure all fields are loaded
+        user.refresh_from_db()
         
         # Check if email is verified
         if not user.is_email_verified:
@@ -191,12 +197,9 @@ def login(request):
         # Generate tokens
         refresh = RefreshToken.for_user(user)
         
-        # Update last login
-        user.last_login_at = timezone.now()
-        user.save()
-        
         # Prepare response
         user_data = UserResponseSerializer(user).data
+
         
         return Response({
             'access': str(refresh.access_token),
@@ -226,6 +229,7 @@ def logout(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def password_reset_request(request):
     """
     Request password reset OTP via email.
@@ -242,6 +246,12 @@ def password_reset_request(request):
             
             # Check if email is verified
             if not user.is_email_verified:
+                # Check rate limiting
+                if not can_resend_otp(user.email_verification_sent_at, cooldown_seconds=60):
+                    return Response({
+                        'error': 'Please wait 60 seconds before requesting a new OTP.'
+                    }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
                 # Send email verification OTP instead
                 otp = generate_otp()
                 user.email_verification_otp = otp
@@ -259,6 +269,12 @@ def password_reset_request(request):
                     'otp_sent': True
                 }, status=status.HTTP_403_FORBIDDEN)
             
+            # Check rate limiting
+            if not can_resend_otp(user.password_reset_sent_at, cooldown_seconds=60):
+                return Response({
+                    'error': 'Please wait 60 seconds before requesting a new OTP.'
+                }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
             # Generate and send password reset OTP
             otp = generate_otp()
             user.password_reset_otp = otp
@@ -283,28 +299,36 @@ def password_reset_request(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def password_reset_confirm(request):
     """
     Reset password with OTP.
     Endpoint: POST /api/auth/password-reset/confirm/
     """
+    print("Password Reset Confirm Data:", request.data) # Debug print
+    # Force reload
     serializer = PasswordResetConfirmSerializer(data=request.data)
     
     if serializer.is_valid():
         email = serializer.validated_data['email']
         otp = serializer.validated_data['otp']
-        new_password = serializer.validated_data['password']
+        new_password = serializer.validated_data['new_password']
         
         # Find user
         try:
             user = User.objects.get(email=email)
+            print(f"User found: {user.email}") # Debug print
+            print(f"Stored OTP: {user.password_reset_otp}, Incoming OTP: {otp}") # Debug print
+            print(f"OTP Sent At: {user.password_reset_sent_at}") # Debug print
         except User.DoesNotExist:
+            print("User not found") # Debug print
             return Response({
                 'error': 'User not found.'
             }, status=status.HTTP_404_NOT_FOUND)
         
         # Validate OTP
         is_valid, error_message = validate_otp(user, otp, 'password_reset')
+        print(f"OTP Validation Result: {is_valid}, Error: {error_message}") # Debug print
         
         if not is_valid:
             # Increment attempts if OTP is incorrect
@@ -324,11 +348,13 @@ def password_reset_confirm(request):
             'message': 'Password reset successful. Please log in with your new password.'
         }, status=status.HTTP_200_OK)
     
+    print("Serializer Errors:", serializer.errors) # Debug print
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def resend_verification(request):
     """
     Resend email verification OTP.
@@ -387,6 +413,9 @@ def user_profile(request):
     """
     user = request.user
     
+    # Refresh user from database to ensure all fields are loaded
+    user.refresh_from_db()
+    
     if request.method == 'GET':
         serializer = UserProfileSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
@@ -435,45 +464,4 @@ def change_password(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# ========== MEDICAL HISTORY ENDPOINTS ==========
 
-@api_view(['GET', 'POST', 'PUT'])
-@permission_classes([IsAuthenticated])
-def medical_history(request):
-    """
-    Get, add, or update medical history.
-    Endpoint: GET/POST/PUT /api/auth/user/medical-history/
-    """
-    user = request.user
-    
-    if request.method == 'GET':
-        try:
-            medical_history_obj = user.medical_history
-            serializer = MedicalHistorySerializer(medical_history_obj)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        except MedicalHistory.DoesNotExist:
-            return Response({
-                'error': 'Medical history not found.'
-            }, status=status.HTTP_404_NOT_FOUND)
-    
-    elif request.method in ['POST', 'PUT']:
-        try:
-            # Try to get existing medical history
-            medical_history_obj = user.medical_history
-            serializer = MedicalHistorySerializer(medical_history_obj, data=request.data, partial=True)
-            
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
-        except MedicalHistory.DoesNotExist:
-            # Create new medical history
-            serializer = MedicalHistorySerializer(data=request.data)
-            
-            if serializer.is_valid():
-                serializer.save(user=user)
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

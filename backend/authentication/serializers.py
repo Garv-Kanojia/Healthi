@@ -1,11 +1,11 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import authenticate
-from .models import User, MedicalHistory
+from .models import User
 
 
 class UserRegistrationSerializer(serializers.ModelSerializer):
-    """Serializer for user registration"""
+    """Serializer for user registration with optional medical history"""
     
     password = serializers.CharField(
         write_only=True, 
@@ -13,10 +13,11 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         validators=[validate_password]
     )
     password_confirm = serializers.CharField(write_only=True, required=True)
+    medical_notes = serializers.CharField(required=False, allow_blank=True)
     
     class Meta:
         model = User
-        fields = ['email', 'password', 'password_confirm', 'name', 'age', 'gender']
+        fields = ['email', 'password', 'password_confirm', 'name', 'age', 'gender', 'medical_notes']
         extra_kwargs = {
             'age': {'required': False},
             'gender': {'required': False},
@@ -30,9 +31,20 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             })
         return attrs
     
+    def validate_age(self, value):
+        """Custom age validation with clear messages"""
+        if value is None:
+            return value
+        if value < 18:
+            raise serializers.ValidationError('Age must be at least 18.')
+        if value > 120:
+            raise serializers.ValidationError('Age must be at most 120.')
+        return value
+    
     def create(self, validated_data):
-        """Create user with hashed password"""
+        """Create user with hashed password and optional medical notes"""
         validated_data.pop('password_confirm')
+        medical_notes = validated_data.pop('medical_notes', '')
         
         user = User.objects.create_user(
             email=validated_data['email'],
@@ -40,6 +52,7 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
             name=validated_data['name'],
             age=validated_data.get('age'),
             gender=validated_data.get('gender', ''),
+            medical_notes=medical_notes,
             is_email_verified=False
         )
         
@@ -83,20 +96,11 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     
     email = serializers.EmailField(required=True)
     otp = serializers.CharField(required=True, max_length=6, min_length=6)
-    password = serializers.CharField(
+    new_password = serializers.CharField(
         required=True, 
         write_only=True, 
         validators=[validate_password]
     )
-    password_confirm = serializers.CharField(required=True, write_only=True)
-    
-    def validate(self, attrs):
-        """Validate passwords match"""
-        if attrs['password'] != attrs['password_confirm']:
-            raise serializers.ValidationError({
-                'password_confirm': 'Passwords do not match.'
-            })
-        return attrs
 
 
 class ResendVerificationSerializer(serializers.Serializer):
@@ -106,7 +110,7 @@ class ResendVerificationSerializer(serializers.Serializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
-    """Serializer for user profile"""
+    """Serializer for user profile with medical history"""
     
     has_medical_history = serializers.SerializerMethodField()
     
@@ -114,26 +118,46 @@ class UserProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'email', 'name', 'age', 'gender', 
-            'is_email_verified', 'created_at', 'has_medical_history'
+            'is_email_verified', 'created_at', 'has_medical_history',
+            'medical_notes'
         ]
         read_only_fields = ['id', 'email', 'is_email_verified', 'created_at']
     
     def get_has_medical_history(self, obj):
         """Check if user has medical history"""
-        return hasattr(obj, 'medical_history')
+        return bool(obj.medical_notes)
 
 
 class UserProfileUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for updating user profile"""
-    
+    """Serializer for updating user profile including medical history"""
+
     class Meta:
         model = User
-        fields = ['name', 'age', 'gender']
+        fields = ['name', 'age', 'gender', 'medical_notes']
         extra_kwargs = {
             'name': {'required': False},
             'age': {'required': False},
             'gender': {'required': False},
+            'medical_notes': {'required': False, 'allow_blank': True},
         }
+    
+    def validate_age(self, value):
+        """Custom age validation for profile updates"""
+        if value is None:
+            return value
+        if value < 18:
+            raise serializers.ValidationError('Age must be at least 18.')
+        if value > 120:
+            raise serializers.ValidationError('Age must be at most 120.')
+        return value
+
+    def update(self, instance, validated_data):
+        """Update user profile including medical notes directly"""
+        # Update all provided fields including medical_notes
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        return instance
 
 
 class ChangePasswordSerializer(serializers.Serializer):
@@ -156,21 +180,19 @@ class ChangePasswordSerializer(serializers.Serializer):
         return attrs
 
 
-class MedicalHistorySerializer(serializers.ModelSerializer):
-    """Serializer for medical history"""
-    
-    class Meta:
-        model = MedicalHistory
-        fields = ['id', 'medical_notes', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
-
-
 class UserResponseSerializer(serializers.ModelSerializer):
     """Serializer for user response in authentication"""
+    
+    has_medical_history = serializers.SerializerMethodField()
     
     class Meta:
         model = User
         fields = [
             'id', 'email', 'name', 'age', 'gender', 
-            'is_email_verified', 'created_at'
+            'is_email_verified', 'created_at', 'has_medical_history',
+            'medical_notes'
         ]
+
+    def get_has_medical_history(self, obj):
+        """Check if user has medical history"""
+        return bool(obj.medical_notes)
