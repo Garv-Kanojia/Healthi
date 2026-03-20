@@ -1,5 +1,5 @@
 """
-WebSocket consumer for real-time audio transcription using Hugging Face Space.
+WebSocket consumer for real-time audio transcription using local faster-whisper.
 Receives 16kHz audio chunks from frontend and transcribes them in real-time.
 """
 
@@ -9,20 +9,21 @@ import os
 import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from gradio_client import Client, handle_file
+from faster_whisper import WhisperModel
 
 
-# Initialize Hugging Face Client for transcription (private space requires token)
-HF_TOKEN = os.environ.get("HF_TOKEN")
-print("Initializing Hugging Face Client for transcription...")
-HF_CLIENT = Client("Megatron14/Audio_Transcription", hf_token=HF_TOKEN)
-print("Hugging Face Client initialized successfully!")
+# Initialize faster-whisper locally
+print("Initializing local faster-whisper model...")
+# Using 'base' model by default for real-time performance. You can change this to 'small' or 'medium' for better accuracy.
+# Make sure to update device to 'cuda' and compute_type to 'float16' if you're running on a GPU.
+WHISPER_MODEL = WhisperModel("base", device="cpu", compute_type="int8")
+print("Local faster-whisper model initialized successfully!")
 
 
 class TranscriptionConsumer(AsyncWebsocketConsumer):
     """
     WebSocket consumer for audio transcription.
-    Handles real-time audio streaming and transcription using Hugging Face Space.
+    Handles real-time audio streaming and transcription using local faster-whisper.
     """
     
     async def connect(self):
@@ -73,9 +74,9 @@ class TranscriptionConsumer(AsyncWebsocketConsumer):
                 'error': 'Expected audio data as bytes'
             }))
     
-    def call_hf_api(self, file_path):
+    def call_local_whisper(self, file_path):
         """
-        Call Hugging Face Space API to transcribe audio.
+        Call local faster-whisper model to transcribe audio.
         
         Args:
             file_path: Path to the audio file to transcribe
@@ -84,19 +85,16 @@ class TranscriptionConsumer(AsyncWebsocketConsumer):
             str: Transcription result or error message
         """
         try:
-            # The api_name depends on your Gradio app, usually /predict
-            result = HF_CLIENT.predict(
-                audio_filepath=handle_file(file_path),
-                api_name="/predict"
-            )
-            return result
+            segments, info = WHISPER_MODEL.transcribe(file_path, beam_size=5)
+            text = " ".join([segment.text for segment in segments])
+            return text
         except Exception as e:
-            return str(e)
+            return f"Error: {str(e)}"
     
     async def transcribe_audio(self, audio_data):
         """
-        Transcribe audio data using Hugging Face Space API.
-        Saves audio to temporary file, sends to HF Space, and cleans up.
+        Transcribe audio data using local faster-whisper model.
+        Saves audio to temporary file, transcribes using local model, and cleans up.
         
         Args:
             audio_data: Audio bytes in WAV format (16kHz)
@@ -112,9 +110,9 @@ class TranscriptionConsumer(AsyncWebsocketConsumer):
                 temp_audio.write(audio_data)
                 temp_audio_path = temp_audio.name
             
-            # Transcribe using HF Space API in thread pool (blocking operation)
+            # Transcribe using local model in thread pool (blocking operation)
             transcribed_text = await asyncio.to_thread(
-                self.call_hf_api,
+                self.call_local_whisper,
                 temp_audio_path
             )
             
