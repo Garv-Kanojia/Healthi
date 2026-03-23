@@ -13,7 +13,7 @@ from .serializers import (
     ChatCreateSerializer,
     MessageQuerySerializer
 )
-from .Services.rag import rag_service
+from .Services.rag import first_query, followup_query, add_file_to_memory
 from .Services.file_extractor import extract_text_from_pdf, ocr_from_preprocessed_image
 import base64
 import tempfile
@@ -183,8 +183,8 @@ class ChatInteractionView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Initialize RAG service
-            rag = rag_service(chat_id=chat.chat_id, username=request.user.email)
+            username = request.user.email
+            chat_id_str = str(chat.chat_id)
 
             # Retrieve the very last message based on created_at
             last_message = chat.messages.order_by('-created_at').first()
@@ -249,19 +249,32 @@ class ChatInteractionView(APIView):
                     
                     if processed_outputs:
                         file_response_text = file_cleaned_output("File Data\n\n".join(processed_outputs))
-                        rag.add_file_to_memory(file_response_text)
+                        add_file_to_memory(
+                            file_content=file_response_text,
+                            file_name="combined_files",
+                            username=username,
+                            chatID=chat_id_str
+                        )
                         print("File Response created and added to memory")
 
             # Determine if this is first query or follow-up
             if last_message is None:
-                response_text = rag.first_query(query, patient_info=chat.patient_info, file_response=file_response_text)
+                response_text = first_query(
+                    query=query,
+                    file_response=file_response_text
+                )
             else:
                 # Get last message for short-term memory
-                short_term_memory = ""
                 content = last_message.get_content()
                 short_term_memory = f"User: {content.get('prompt', '')}\n\nAssistant: {content.get('response', '')}"
                 
-                response_text = rag.followup_query(query, short_term_memory, file_response=file_response_text)
+                response_text = followup_query(
+                    query=query,
+                    short_term_memory=short_term_memory,
+                    username=username,
+                    chatID=chat_id_str,
+                    file_response=file_response_text
+                )
             
             # Update message with actual response
             message.set_content(prompt=query, response=response_text)

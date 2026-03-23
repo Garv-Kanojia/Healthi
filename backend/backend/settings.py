@@ -13,6 +13,10 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
+import os
+import dotenv
+
+dotenv.load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -87,12 +91,11 @@ WSGI_APPLICATION = "backend.wsgi.application"
 ASGI_APPLICATION = "backend.asgi.application"
 
 # Channel layers for WebSocket support
+# Using InMemoryChannelLayer for local development (no Redis required).
+# Switch back to channels_redis.core.RedisChannelLayer for production.
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [(config('REDIS_HOST', default='127.0.0.1'), config('REDIS_PORT', default=6379, cast=int))],
-        },
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
     },
 }
 
@@ -191,7 +194,9 @@ SIMPLE_JWT = {
 # ========== CORS SETTINGS ==========
 
 CORS_ALLOWED_ORIGINS = [
-    "https://d1ni3kajstzgt2.cloudfront.net"
+    os.getenv("FRONTEND_URL"),
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
 ]
 
 CORS_ALLOW_CREDENTIALS = True
@@ -240,4 +245,3 @@ CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 
 # Message Encryption Key (Generated for development)
 MESSAGE_ENCRYPTION_KEY = config('MESSAGE_ENCRYPTION_KEY', default='zTPP71laMQEn0CkvqR_J3y36HHai-HHrNDHDUDD5KPc=')
-
